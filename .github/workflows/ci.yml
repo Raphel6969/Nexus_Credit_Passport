@@ -1,0 +1,22 @@
+name: CI
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [api, ingestion, scoring, web]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Dummy Lint
+        run: echo "Linting ${{ matrix.service }} (stub)"
+
+      - name: Dummy Test
+        run: echo "Testing ${{ matrix.service }} (stub)"
