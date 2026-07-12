@@ -2,6 +2,7 @@ use axum::{routing::get, Router};
 use std::net::SocketAddr;
 
 mod health;
+mod model;
 
 #[tokio::main]
 async fn main() {
