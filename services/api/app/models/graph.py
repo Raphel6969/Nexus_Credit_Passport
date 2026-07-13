@@ -60,6 +60,8 @@ class Counterparty(Base):
     type = Column(String, nullable=False)                     # SUPPLIER / CUSTOMER / LENDER / UNKNOWN
     identifier = Column(String, nullable=True)                # Asymmetrically encrypted (age, base64)
     identifier_type = Column(String, nullable=True)           # VPA / GSTIN / ACCOUNT_IFSC / PAN / PHONE
+    identifier_hmac = Column(String, nullable=True)           # HMAC blind index for cross-source resolution
+    source_type = Column(String, nullable=True)               # AA / GSTN / RAZORPAY / ZOHO
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -92,6 +94,7 @@ class Transaction(Base):
     external_id_hmac = Column(String, nullable=True, unique=True)  # HMAC-SHA256(key, fip_txnId)
 
     reference_number = Column(String, nullable=True)
+    revenue_role = Column(String, nullable=False, default='primary') # primary / informational / tax_summary
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
@@ -101,6 +104,54 @@ class Transaction(Base):
     __table_args__ = (
         Index('ix_transactions_account_timestamp', 'account_id', timestamp.desc()),
     )
+
+
+class TaxFiling(Base):
+    __tablename__ = 'tax_filings'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id = Column(UUID(as_uuid=True), ForeignKey('businesses.id'), nullable=False)
+    return_type = Column(String, nullable=False)              # GSTR3B / GSTR1 / GSTR2A
+    period = Column(String, nullable=False)                   # YYYY-MM
+    gross_turnover = Column(BigInteger, nullable=True)
+    tax_paid = Column(BigInteger, nullable=True)
+    filing_date = Column(Date, nullable=True)
+    status = Column(String, nullable=False)                   # FILED / PENDING / LATE
+    raw_data_sealed = Column(Text, nullable=True)             # age-encrypted
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    business = relationship("Business")
+
+    __table_args__ = (
+        Index('ix_tax_filings_biz_type_period', 'business_id', 'return_type', 'period', unique=True),
+    )
+
+
+class Invoice(Base):
+    __tablename__ = 'invoices'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id = Column(UUID(as_uuid=True), ForeignKey('businesses.id'), nullable=False)
+    counterparty_id = Column(UUID(as_uuid=True), ForeignKey('counterparties.id'), nullable=True)
+    external_id_hmac = Column(String, nullable=True, unique=True)
+    invoice_type = Column(String, nullable=False)             # RECEIVABLE / PAYABLE
+    amount = Column(BigInteger, nullable=False)               # paise
+    currency = Column(String(3), default='INR', nullable=False)
+    issue_date = Column(Date, nullable=False)
+    due_date = Column(Date, nullable=True)
+    paid_date = Column(Date, nullable=True)
+    status = Column(String, nullable=False)                   # DRAFT / SENT / OVERDUE / PAID / VOID
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    business = relationship("Business")
+    counterparty = relationship("Counterparty")
+
+    __table_args__ = (
+        Index('ix_invoices_biz_status', 'business_id', 'status'),
+    )
+
 
 
 class CashFlowEvent(Base):

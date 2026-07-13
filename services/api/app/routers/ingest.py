@@ -1,9 +1,5 @@
 """
 Ingest router — proxies ingest requests to the Go ingestion service.
-
-POST /v1/businesses/{business_id}/ingest/aa
-  Accepts: { "consentId": "...", "accountId": "..." }
-  Returns: passthrough from ingestion service (202 with counts)
 """
 import httpx
 from fastapi import APIRouter, HTTPException
@@ -19,6 +15,10 @@ class IngestAARequest(BaseModel):
     accountId: str
 
 
+class GenericIngestRequest(BaseModel):
+    accountId: str
+
+
 @router.post("/businesses/{business_id}/ingest/aa", status_code=202)
 async def ingest_aa(business_id: str, req: IngestAARequest):
     """
@@ -30,10 +30,38 @@ async def ingest_aa(business_id: str, req: IngestAARequest):
         "accountId": req.accountId,
         "businessId": business_id,
     }
+    return await proxy_to_ingestion("/v1/ingest/aa", payload)
+
+
+@router.post("/businesses/{business_id}/ingest/gstn", status_code=202)
+async def ingest_gstn(business_id: str, req: GenericIngestRequest):
+    return await proxy_to_ingestion("/v1/ingest/gstn", {
+        "accountId": req.accountId,
+        "businessId": business_id,
+    })
+
+
+@router.post("/businesses/{business_id}/ingest/razorpay", status_code=202)
+async def ingest_razorpay(business_id: str, req: GenericIngestRequest):
+    return await proxy_to_ingestion("/v1/ingest/razorpay", {
+        "accountId": req.accountId,
+        "businessId": business_id,
+    })
+
+
+@router.post("/businesses/{business_id}/ingest/zoho", status_code=202)
+async def ingest_zoho(business_id: str, req: GenericIngestRequest):
+    return await proxy_to_ingestion("/v1/ingest/zoho", {
+        "accountId": req.accountId,
+        "businessId": business_id,
+    })
+
+
+async def proxy_to_ingestion(path: str, payload: dict):
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
-                f"{settings.INGESTION_SERVICE_URL}/v1/ingest/aa",
+                f"{settings.INGESTION_SERVICE_URL}{path}",
                 json=payload,
             )
         resp.raise_for_status()

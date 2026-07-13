@@ -15,18 +15,18 @@ Product & tech debt backlog. One item per line. Move to sprint when committed.
 - [x] Go structs in Ingestion service
 - [x] Rust model structs in Scoring service (sqlx deferred to Phase 4)
 
-## Phase 2 — First Vertical Slice (Setu AA Sandbox)
-- [ ] Mock Setu AA server (Go) — real response shape, swap via SETU_BASE_URL
-- [ ] Setu AA client (Go) — CreateConsent, CreateSession, GetFIData
-- [ ] Normalizer (Go) — Rebit floats→paise, IST timestamps, UPI VPA extraction
-- [ ] PII sealing (Go) — `filippo.io/age` sealed-box + HMAC blind index
-- [ ] pgx store (Go) — UpsertTransaction with dedup on `external_id_hmac`
-- [ ] Ingestion trigger — POST /v1/ingest/aa
-- [ ] Rust scoring stub — pure ScoringInput→ScoringOutput, no DB/network
-- [ ] FastAPI score proxy — GET /v1/businesses/{id}/score
-- [ ] FastAPI ingest proxy — POST /v1/businesses/{id}/ingest/aa
-- [ ] Next.js score dashboard — SVG gauge, last-synced timestamp
-- [ ] Universal root .env consolidation (single .env.example + .env.local)
+## Phase 2 — First Vertical Slice (Setu AA Sandbox) ✅
+- [x] Mock Setu AA server (Go) — real response shape, swap via SETU_BASE_URL
+- [x] Setu AA client (Go) — CreateConsent, CreateSession, GetFIData
+- [x] Normalizer (Go) — Rebit floats→paise, IST timestamps, UPI VPA extraction
+- [x] PII sealing (Go) — `filippo.io/age` sealed-box + HMAC blind index
+- [x] pgx store (Go) — UpsertTransaction with dedup on `external_id_hmac`
+- [x] Ingestion trigger — POST /v1/ingest/aa
+- [x] Rust scoring stub — pure ScoringInput→ScoringOutput, no DB/network
+- [x] FastAPI score proxy — GET /v1/businesses/{id}/score
+- [x] FastAPI ingest proxy — POST /v1/businesses/{id}/ingest/aa
+- [x] Next.js score dashboard — SVG gauge, last-synced timestamp
+- [x] Universal root .env consolidation (single .env.example + .env.local)
 
 ## Phase 3 — Expand Data Sources
 - [ ] GSTN sandbox / synthetic connector

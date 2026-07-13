@@ -1,0 +1,16 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY internal/connectors/razorpay/mock/server.go ./server.go
+
+RUN go build -o razorpay-mock server.go
+
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/razorpay-mock .
+
+EXPOSE 9092
+CMD ["./razorpay-mock"]

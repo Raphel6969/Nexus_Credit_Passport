@@ -13,7 +13,7 @@ type Business struct {
 }
 
 // Account represents a data source connected to the business.
-// source_type: AA / RAZORPAY / GSTN / ECOMMERCE
+// source_type: AA / RAZORPAY / GSTN / ZOHO
 // fi_type:     Rebit FI Type string e.g. DEPOSIT / TERM_DEPOSIT / RECURRING_DEPOSIT
 type Account struct {
 	ID                   string     `json:"id" db:"id"`
@@ -38,10 +38,12 @@ type Account struct {
 type Counterparty struct {
 	ID             string  `json:"id" db:"id"`
 	BusinessID     string  `json:"business_id" db:"business_id"`
-	Name           *string `json:"name,omitempty" db:"name"`                   // ENCRYPTED
-	Type           string  `json:"type" db:"type"`                             // SUPPLIER / CUSTOMER / LENDER / UNKNOWN
-	Identifier     *string `json:"identifier,omitempty" db:"identifier"`       // ENCRYPTED
-	IdentifierType *string `json:"identifier_type,omitempty" db:"identifier_type"` // VPA / GSTIN / ACCOUNT_IFSC / PAN / PHONE
+	Name           *string `json:"name,omitempty" db:"name"`                       // ENCRYPTED
+	Type           string  `json:"type" db:"type"`                                 // SUPPLIER / CUSTOMER / LENDER / UNKNOWN
+	Identifier     *string `json:"identifier,omitempty" db:"identifier"`           // ENCRYPTED
+	IdentifierType *string `json:"identifier_type,omitempty" db:"identifier_type"` // VPA / GSTIN / ACCOUNT_IFSC / PAN / PHONE / EMAIL
+	IdentifierHMAC *string `json:"identifier_hmac,omitempty" db:"identifier_hmac"` // Blind index for cross-source resolution
+	SourceType     *string `json:"source_type,omitempty" db:"source_type"`         // AA / GSTN / RAZORPAY / ZOHO
 	CreatedAt      string  `json:"created_at" db:"created_at"`
 	UpdatedAt      string  `json:"updated_at" db:"updated_at"`
 }
@@ -59,7 +61,7 @@ type Transaction struct {
 	TransactionalBalance *int64     `json:"transactional_balance,omitempty" db:"transactional_balance"`
 	// Rebit AA core fields
 	Type                 string     `json:"type" db:"type"`              // CREDIT / DEBIT
-	Mode                 string     `json:"mode" db:"mode"`              // UPI / NEFT / RTGS / IMPS / NACH / ATM / CARD / CHEQUE / ECS / OTHERS
+	Mode                 string     `json:"mode" db:"mode"`              // UPI / NEFT / RTGS / IMPS / NACH / RAZORPAY / GST_FILING / ZOHO
 	Timestamp            time.Time  `json:"timestamp" db:"timestamp"`    // transactionTimestamp
 	ValueDate            *string    `json:"value_date,omitempty" db:"value_date"` // YYYY-MM-DD
 	// PII — ENCRYPTED (age sealed-box, base64)
@@ -68,8 +70,42 @@ type Transaction struct {
 	// Dedup blind index
 	ExternalIDHMAC       *string    `json:"external_id_hmac,omitempty" db:"external_id_hmac"`
 	ReferenceNumber      *string    `json:"reference_number,omitempty" db:"reference_number"`
+	// Revenue double-counting prevention (Phase 3)
+	RevenueRole          string     `json:"revenue_role" db:"revenue_role"` // primary / informational / tax_summary
 	CreatedAt            time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt            time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// TaxFiling represents a GST return summary from the GSTN connector.
+type TaxFiling struct {
+	ID              string     `json:"id" db:"id"`
+	BusinessID      string     `json:"business_id" db:"business_id"`
+	ReturnType      string     `json:"return_type" db:"return_type"`     // GSTR3B / GSTR1 / GSTR2A
+	Period          string     `json:"period" db:"period"`               // "2025-06" (YYYY-MM)
+	GrossTurnover   *int64     `json:"gross_turnover,omitempty" db:"gross_turnover"` // paise
+	TaxPaid         *int64     `json:"tax_paid,omitempty" db:"tax_paid"` // paise
+	FilingDate      *string    `json:"filing_date,omitempty" db:"filing_date"`
+	Status          string     `json:"status" db:"status"`               // FILED / PENDING / LATE
+	RawDataSealed   *string    `json:"raw_data_sealed,omitempty" db:"raw_data_sealed"` // age-encrypted
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
+}
+
+// Invoice represents an AR/AP invoice from the Zoho Books connector.
+type Invoice struct {
+	ID              string     `json:"id" db:"id"`
+	BusinessID      string     `json:"business_id" db:"business_id"`
+	CounterpartyID  *string    `json:"counterparty_id,omitempty" db:"counterparty_id"`
+	ExternalIDHMAC  *string    `json:"external_id_hmac,omitempty" db:"external_id_hmac"`
+	InvoiceType     string     `json:"invoice_type" db:"invoice_type"`   // RECEIVABLE / PAYABLE
+	Amount          int64      `json:"amount" db:"amount"`               // paise
+	Currency        string     `json:"currency" db:"currency"`
+	IssueDate       string     `json:"issue_date" db:"issue_date"`
+	DueDate         *string    `json:"due_date,omitempty" db:"due_date"`
+	PaidDate        *string    `json:"paid_date,omitempty" db:"paid_date"`
+	Status          string     `json:"status" db:"status"`               // DRAFT / SENT / OVERDUE / PAID / VOID
+	CreatedAt       time.Time  `json:"created_at" db:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at" db:"updated_at"`
 }
 
 // CashFlowEvent is a semantic event derived from transactions for ML scoring.

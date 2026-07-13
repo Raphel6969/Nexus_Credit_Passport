@@ -11,8 +11,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/nexus-credit-passport/ingestion/internal/connectors"
 	"github.com/nexus-credit-passport/ingestion/internal/connectors/setu"
-	"github.com/nexus-credit-passport/ingestion/internal/normalize"
+	"github.com/nexus-credit-passport/ingestion/internal/orchestrator"
+	"github.com/nexus-credit-passport/ingestion/internal/pii"
 	"github.com/nexus-credit-passport/ingestion/internal/store"
 )
 
@@ -30,104 +32,50 @@ func main() {
 	}
 	defer pg.Close()
 
-	// Init normalizer (crypto keys from env)
-	norm, err := normalize.NewNormalizer()
+	// Init PII processor (crypto keys from env)
+	piiProc, err := pii.NewProcessor()
 	if err != nil {
-		log.Fatalf("Normalizer init: %v", err)
+		log.Fatalf("PII processor init: %v", err)
 	}
 
-	// Init Setu client (base URL from SETU_BASE_URL — mock or real)
-	setuClient := setu.NewClientFromEnv()
+	// Init orchestrator
+	orch := orchestrator.New(piiProc, pg)
 
 	r := gin.Default()
 
 	r.GET("/healthz", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status":       "ok",
+			"status":        "ok",
 			"setu_base_url": os.Getenv("SETU_BASE_URL"),
 		})
 	})
 
-	// POST /v1/ingest/aa
-	// Accepts: { "consentId": "...", "accountId": "...", "businessId": "..." }
-	// Runs the full fetch → normalize → write pipeline.
-	// Phase 2: synchronous (blocks until done). Phase 3+: async with queue.
-	// TODO(phase3): move to async job queue to support large data ranges
-	r.POST("/v1/ingest/aa", func(c *gin.Context) {
-		var req struct {
+	// POST /v1/ingest/aa — Setu Account Aggregator
+	r.POST("/v1/ingest/aa", makeIngestHandler(orch, func() connectors.SourceConnector {
+		return setu.NewAdapter()
+	}, func(c *gin.Context, req *connectors.SyncRequest) {
+		var body struct {
 			ConsentID  string `json:"consentId" binding:"required"`
 			AccountID  string `json:"accountId" binding:"required"`
 			BusinessID string `json:"businessId" binding:"required"`
 		}
-		if err := c.ShouldBindJSON(&req); err != nil {
+		if err := c.ShouldBindJSON(&body); err != nil {
 			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 			return
 		}
+		req.BusinessID = body.BusinessID
+		req.AccountID = body.AccountID
+		req.AuthConfig = map[string]string{"consentId": body.ConsentID}
+	}))
 
-		// Create a data session for the last 12 months
-		from := time.Now().AddDate(-1, 0, 0)
-		to := time.Now()
+	// POST /v1/ingest/gstn — GSTN tax returns
+	r.POST("/v1/ingest/gstn", makeGenericIngestHandler(orch, "gstn"))
 
-		session, err := setuClient.CreateSession(req.ConsentID, from, to)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "create session: " + err.Error()})
-			return
-		}
+	// POST /v1/ingest/razorpay — Razorpay payments/settlements
+	r.POST("/v1/ingest/razorpay", makeGenericIngestHandler(orch, "razorpay"))
 
-		// For sandbox/mock: session is immediately COMPLETED
-		// For real AA: may need to poll. Phase 3 will add webhook-driven flow.
-		fiData, err := setuClient.GetFIData(session.ID)
-		if err != nil {
-			c.JSON(http.StatusBadGateway, gin.H{"error": "get FI data: " + err.Error()})
-			return
-		}
-
-		totalInserted := 0
-		totalSkipped := 0
-
-		for _, fip := range fiData.FI {
-			for _, fiAccount := range fip.Data {
-				result, err := norm.NormalizeFIAccount(fiAccount, req.BusinessID, req.AccountID)
-				if err != nil {
-					c.JSON(http.StatusInternalServerError, gin.H{"error": "normalize: " + err.Error()})
-					return
-				}
-
-				// Upsert account summary
-				if err := pg.UpsertAccount(c.Request.Context(), result.AccountUpdate); err != nil {
-					log.Printf("upsert account: %v", err)
-				}
-
-				// Upsert counterparties
-				for _, cp := range result.Counterparties {
-					if err := pg.UpsertCounterparty(c.Request.Context(), cp); err != nil {
-						log.Printf("upsert counterparty: %v", err)
-					}
-				}
-
-				// Upsert transactions
-				for _, txn := range result.Transactions {
-					inserted, err := pg.UpsertTransaction(c.Request.Context(), txn)
-					if err != nil {
-						log.Printf("upsert txn: %v", err)
-						continue
-					}
-					if inserted {
-						totalInserted++
-					} else {
-						totalSkipped++
-					}
-				}
-			}
-		}
-
-		c.JSON(http.StatusAccepted, gin.H{
-			"status":              "ok",
-			"transactionsInserted": totalInserted,
-			"transactionsSkipped":  totalSkipped,
-			"sessionId":           session.ID,
-		})
-	})
+	// POST /v1/ingest/zoho — Zoho Books invoices/bills
+	r.POST("/v1/ingest/zoho", makeGenericIngestHandler(orch, "zoho"))
 
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -150,4 +98,69 @@ func main() {
 		log.Fatal("Server forced to shutdown:", err)
 	}
 	log.Println("Ingestion server exiting")
+}
+
+// makeIngestHandler creates a Gin handler for a specific connector with custom request parsing.
+func makeIngestHandler(
+	orch *orchestrator.Orchestrator,
+	connectorFactory func() connectors.SourceConnector,
+	parseRequest func(*gin.Context, *connectors.SyncRequest),
+) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		req := connectors.SyncRequest{}
+		parseRequest(c, &req)
+		if c.IsAborted() {
+			return
+		}
+
+		connector := connectorFactory()
+		result, err := orch.Run(c.Request.Context(), connector, req)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusAccepted, result)
+	}
+}
+
+// makeGenericIngestHandler creates a Gin handler for connectors that accept a standard body.
+func makeGenericIngestHandler(orch *orchestrator.Orchestrator, source string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var body struct {
+			BusinessID string `json:"businessId" binding:"required"`
+			AccountID  string `json:"accountId" binding:"required"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+
+		req := connectors.SyncRequest{
+			BusinessID: body.BusinessID,
+			AccountID:  body.AccountID,
+			AuthConfig: map[string]string{},
+		}
+
+		var connector connectors.SourceConnector
+		switch source {
+		case "gstn":
+			// Dynamically import at call time to avoid circular deps
+			req.AuthConfig["gstin"] = os.Getenv("BUSINESS_GSTIN")
+			connector = newGSTNConnector()
+		case "razorpay":
+			connector = newRazorpayConnector()
+		case "zoho":
+			connector = newZohoConnector()
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown source: " + source})
+			return
+		}
+
+		result, err := orch.Run(c.Request.Context(), connector, req)
+		if err != nil {
+			c.JSON(http.StatusBadGateway, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusAccepted, result)
+	}
 }

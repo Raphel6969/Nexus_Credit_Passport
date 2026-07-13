@@ -1,0 +1,16 @@
+FROM golang:1.25-alpine AS builder
+
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+
+COPY internal/connectors/zoho/mock/server.go ./server.go
+
+RUN go build -o zoho-mock server.go
+
+FROM alpine:latest
+WORKDIR /app
+COPY --from=builder /app/zoho-mock .
+
+EXPOSE 9093
+CMD ["./zoho-mock"]

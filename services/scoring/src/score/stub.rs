@@ -29,6 +29,8 @@ pub struct ScoringInput {
     pub nach_debit_count: u64,
     /// Latest account balance in paise
     pub current_balance_paise: Option<i64>,
+    /// GST gross turnover in paise (from tax filings)
+    pub gst_turnover_paise: Option<i64>,
     /// Data window in days
     pub data_window_days: u32,
 }
@@ -86,6 +88,15 @@ pub fn compute_score(input: &ScoringInput) -> ScoringOutput {
         score -= 20.0;
     } else if input.nach_debit_count > 0 {
         score -= 5.0; // Some loans is normal for MSMEs
+    }
+
+    // Tax compliance / GST scale signal
+    if let Some(turnover) = input.gst_turnover_paise {
+        if turnover > 100_000_000 { // > 10L
+            score += 40.0;
+        } else if turnover > 0 {
+            score += 20.0;
+        }
     }
 
     // Clamp to 300–850 range

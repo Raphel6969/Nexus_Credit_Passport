@@ -27,14 +27,16 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
     Phase 2: assembles aggregate stats and calls the Rust stub.
     """
     # Pull aggregate stats from transactions — no PII columns touched here
+    # Phase 3: We filter by revenue_role = 'primary' to prevent double-counting
+    # revenue across bank, razorpay, and gstn sources.
     rows = await db.execute(
         text("""
             SELECT
                 COUNT(*)                                          AS total_transactions,
-                COALESCE(SUM(amount) FILTER (WHERE type = 'CREDIT'), 0) AS total_credits,
-                COALESCE(SUM(amount) FILTER (WHERE type = 'DEBIT'), 0)  AS total_debits,
-                COUNT(*) FILTER (WHERE mode = 'UPI')             AS upi_count,
-                COUNT(*) FILTER (WHERE mode = 'NACH' AND type = 'DEBIT') AS nach_debit_count
+                COALESCE(SUM(amount) FILTER (WHERE type = 'CREDIT' AND revenue_role = 'primary'), 0) AS total_credits,
+                COALESCE(SUM(amount) FILTER (WHERE type = 'DEBIT' AND revenue_role = 'primary'), 0)  AS total_debits,
+                COUNT(*) FILTER (WHERE mode = 'UPI' AND revenue_role = 'primary')             AS upi_count,
+                COUNT(*) FILTER (WHERE mode = 'NACH' AND type = 'DEBIT' AND revenue_role = 'primary') AS nach_debit_count
             FROM transactions t
             JOIN accounts a ON t.account_id = a.id
             WHERE a.business_id = :business_id
@@ -62,6 +64,17 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
     )
     balance_record = balance_row.fetchone()
 
+    # Pull GST turnover from tax filings
+    gst_row = await db.execute(
+        text("""
+            SELECT COALESCE(SUM(gross_turnover), 0) AS gst_turnover_paise
+            FROM tax_filings
+            WHERE business_id = :business_id AND return_type = 'GSTR3B'
+        """),
+        {"business_id": business_id},
+    )
+    gst_record = gst_row.fetchone()
+
     # Build ScoringInput for the Rust stub
     scoring_input = {
         "business_id": business_id,
@@ -72,6 +85,7 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
         "upi_transaction_count": int(row.upi_count) if row.upi_count is not None else 0,
         "nach_debit_count": int(row.nach_debit_count) if row.nach_debit_count is not None else 0,
         "current_balance_paise": int(balance_record.balance) if (balance_record and balance_record.balance is not None) else None,
+        "gst_turnover_paise": int(gst_record.gst_turnover_paise) if (gst_record and gst_record.gst_turnover_paise is not None) else 0,
         "data_window_days": 365,
     }
 

@@ -54,6 +54,9 @@ services:
     environment:
       DATABASE_URL_GO: postgres://nexus:nexus@postgres:5432/nexus
       SETU_BASE_URL: http://setu-mock:9090
+      GSTN_BASE_URL: http://gstn-mock:9091
+      RAZORPAY_BASE_URL: http://razorpay-mock:9092
+      ZOHO_BASE_URL: http://zoho-mock:9093
     ports:
       - "8080:8080"
     depends_on:
@@ -92,6 +95,36 @@ services:
     container_name: nexus-setu-mock
     ports:
       - "9090:9090"
+    networks:
+      - nexus-network
+
+  gstn-mock:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile.gstn-mock
+    container_name: nexus-gstn-mock
+    ports:
+      - "9091:9091"
+    networks:
+      - nexus-network
+
+  razorpay-mock:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile.razorpay-mock
+    container_name: nexus-razorpay-mock
+    ports:
+      - "9092:9092"
+    networks:
+      - nexus-network
+
+  zoho-mock:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile.zoho-mock
+    container_name: nexus-zoho-mock
+    ports:
+      - "9093:9093"
     networks:
       - nexus-network
 
