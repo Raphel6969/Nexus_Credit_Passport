@@ -2,10 +2,11 @@ import uuid
 from datetime import datetime, timezone, date
 from typing import Optional
 
-from sqlalchemy import Column, String, BigInteger, DateTime, Date, ForeignKey, Text, Index
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, BigInteger, DateTime, Date, ForeignKey, Text, Index, Integer
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.models.base import Base
+
 
 
 def utc_now():
@@ -184,3 +185,29 @@ class ConsentToken(Base):
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     business = relationship("Business")
+
+
+class ScoreSnapshot(Base):
+    """
+    Append-only audit log of every scoring event.
+
+    Stores derived output only — never raw features or PII.
+    The `drivers` JSONB column holds the full SHAP breakdown returned by the Rust service.
+    """
+    __tablename__ = 'score_snapshots'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id = Column(UUID(as_uuid=True), ForeignKey('businesses.id'), nullable=False)
+    score = Column(Integer, nullable=False)                    # 300–850
+    confidence = Column(String, nullable=False)                # LOW | MEDIUM | HIGH
+    model_version = Column(String, nullable=False)             # e.g. linear-v1.0.0
+    drivers = Column(JSONB, nullable=True)                     # [{feature, label, direction, impact, ...}]
+    computed_at = Column(DateTime(timezone=True), nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    business = relationship("Business")
+
+    __table_args__ = (
+        Index('ix_score_snapshots_biz_computed', 'business_id', 'computed_at'),
+    )
+
