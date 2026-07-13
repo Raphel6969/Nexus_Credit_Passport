@@ -1,14 +1,21 @@
 """
-Score router — assembles aggregate stats and proxies to Rust scoring service.
+Score router — Phase 4: enriched scoring with SHAP driver breakdown.
 
 GET /v1/businesses/{business_id}/score
-  Queries Postgres for aggregate transaction stats (no PII decryption),
-  POSTs to the Rust scoring service, returns the score.
+  1. Existence check: does this business have any transaction data? (404 guard)
+  2. Call Rust scoring service with { business_id } only — Rust fetches its
+     own features directly from Postgres (trust-boundary decision from Phase 4).
+  3. Persist snapshot to score_snapshots for audit trail + future trend view.
+  4. Return full enriched response: score + confidence + drivers[].
 
-The Python API layer ONLY handles non-PII aggregates here. It never decrypts
-narration or counterparty fields — those stay sealed in Postgres until Rust reads
-them directly in Phase 4.
+Trust boundary note:
+  The Python API layer NEVER assembles raw financial features or reads PII columns.
+  It only does the existence check and acts as the HTTP proxy. All feature
+  engineering lives inside the Rust raw-zone (services/scoring).
 """
+import uuid
+from datetime import datetime, timezone
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,81 +30,124 @@ router = APIRouter()
 @router.get("/businesses/{business_id}/score")
 async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
     """
-    Return the credit score for a business.
-    Phase 2: assembles aggregate stats and calls the Rust stub.
+    Return the current credit score for a business, with SHAP driver breakdown.
+
+    Phase 4: Rust service fetches all features directly. API layer only does
+    an existence check, proxies the request, and persists the snapshot.
     """
-    # Pull aggregate stats from transactions — no PII columns touched here
-    # Phase 3: We filter by revenue_role = 'primary' to prevent double-counting
-    # revenue across bank, razorpay, and gstn sources.
-    rows = await db.execute(
+    # ── 1. Existence check ──────────────────────────────────────────────────
+    # Fast COUNT to confirm data exists before calling Rust.
+    # Only reads account_id (FK) — no PII columns.
+    count_row = await db.execute(
         text("""
-            SELECT
-                COUNT(*)                                          AS total_transactions,
-                COALESCE(SUM(amount) FILTER (WHERE type = 'CREDIT' AND revenue_role = 'primary'), 0) AS total_credits,
-                COALESCE(SUM(amount) FILTER (WHERE type = 'DEBIT' AND revenue_role = 'primary'), 0)  AS total_debits,
-                COUNT(*) FILTER (WHERE mode = 'UPI' AND revenue_role = 'primary')             AS upi_count,
-                COUNT(*) FILTER (WHERE mode = 'NACH' AND type = 'DEBIT' AND revenue_role = 'primary') AS nach_debit_count
+            SELECT COUNT(*) AS total_transactions
             FROM transactions t
             JOIN accounts a ON t.account_id = a.id
             WHERE a.business_id = :business_id
         """),
         {"business_id": business_id},
     )
-    row = rows.fetchone()
+    row = count_row.fetchone()
 
-    if not row or row.total_transactions == 0:
+    if not row or (row.total_transactions == 0):
         raise HTTPException(
             status_code=404,
-            detail="No transaction data found for this business. Run /ingest/aa first.",
+            detail=(
+                "No transaction data found for this business. "
+                "Run one of the /ingest/* endpoints first."
+            ),
         )
 
-    # Pull latest balance from accounts
-    balance_row = await db.execute(
-        text("""
-            SELECT balance
-            FROM accounts
-            WHERE business_id = :business_id AND balance IS NOT NULL
-            ORDER BY balance_at DESC NULLS LAST
-            LIMIT 1
-        """),
-        {"business_id": business_id},
-    )
-    balance_record = balance_row.fetchone()
-
-    # Pull GST turnover from tax filings
-    gst_row = await db.execute(
-        text("""
-            SELECT COALESCE(SUM(gross_turnover), 0) AS gst_turnover_paise
-            FROM tax_filings
-            WHERE business_id = :business_id AND return_type = 'GSTR3B'
-        """),
-        {"business_id": business_id},
-    )
-    gst_record = gst_row.fetchone()
-
-    # Build ScoringInput for the Rust stub
-    scoring_input = {
-        "business_id": business_id,
-        "account_ids": [],  # Rust stub doesn't use this yet
-        "total_transactions": int(row.total_transactions) if row.total_transactions is not None else 0,
-        "total_credits_paise": int(row.total_credits) if row.total_credits is not None else 0,
-        "total_debits_paise": int(row.total_debits) if row.total_debits is not None else 0,
-        "upi_transaction_count": int(row.upi_count) if row.upi_count is not None else 0,
-        "nach_debit_count": int(row.nach_debit_count) if row.nach_debit_count is not None else 0,
-        "current_balance_paise": int(balance_record.balance) if (balance_record and balance_record.balance is not None) else None,
-        "gst_turnover_paise": int(gst_record.gst_turnover_paise) if (gst_record and gst_record.gst_turnover_paise is not None) else 0,
-        "data_window_days": 365,
-    }
-
+    # ── 2. Call Rust scoring service ────────────────────────────────────────
+    # Send only business_id — Rust fetches its own features.
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
                 f"{settings.SCORING_SERVICE_URL}/v1/score",
-                json=scoring_input,
+                json={"business_id": business_id},
             )
         resp.raise_for_status()
-        return resp.json()
     except httpx.HTTPStatusError as e:
-        raise HTTPException(status_code=e.response.status_code, detail=str(e))
+        raise HTTPException(
+            status_code=e.response.status_code,
+            detail=f"Scoring service error: {e.response.text}",
+        )
     except httpx.RequestError as e:
-        raise HTTPException(status_code=503, detail=f"Scoring service unavailable: {e}")
+        raise HTTPException(
+            status_code=503,
+            detail=f"Scoring service unavailable: {e}",
+        )
+
+    scoring_result = resp.json()
+
+    # ── 3. Persist score snapshot ───────────────────────────────────────────
+    # Append-only audit row — derived output only, no raw features.
+    try:
+        computed_at = datetime.now(timezone.utc)
+        await db.execute(
+            text("""
+                INSERT INTO score_snapshots
+                    (id, business_id, score, confidence, model_version, drivers, computed_at, created_at)
+                VALUES
+                    (:id, :business_id, :score, :confidence, :model_version, :drivers::jsonb, :computed_at, :created_at)
+            """),
+            {
+                "id": str(uuid.uuid4()),
+                "business_id": business_id,
+                "score": scoring_result.get("score"),
+                "confidence": scoring_result.get("confidence", "UNKNOWN"),
+                "model_version": scoring_result.get("model_version", "unknown"),
+                "drivers": __import__("json").dumps(scoring_result.get("drivers", [])),
+                "computed_at": computed_at,
+                "created_at": computed_at,
+            },
+        )
+        await db.commit()
+    except Exception as e:
+        # Non-fatal: snapshot failure should not block the score response
+        await db.rollback()
+        import logging
+        logging.getLogger(__name__).warning("Failed to persist score snapshot: %s", e)
+
+    # ── 4. Return enriched response ─────────────────────────────────────────
+    return scoring_result
+
+
+@router.get("/businesses/{business_id}/score/history")
+async def get_score_history(
+    business_id: str,
+    limit: int = 10,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return the scoring history for a business (most recent first).
+    Useful for Phase 6 dashboard trend chart.
+    """
+    rows = await db.execute(
+        text("""
+            SELECT id, score, confidence, model_version, computed_at
+            FROM score_snapshots
+            WHERE business_id = :business_id
+            ORDER BY computed_at DESC
+            LIMIT :limit
+        """),
+        {"business_id": business_id, "limit": min(limit, 50)},
+    )
+    history = [
+        {
+            "id": str(row.id),
+            "score": row.score,
+            "confidence": row.confidence,
+            "model_version": row.model_version,
+            "computed_at": row.computed_at.isoformat(),
+        }
+        for row in rows.fetchall()
+    ]
+
+    if not history:
+        raise HTTPException(
+            status_code=404,
+            detail="No score history found for this business.",
+        )
+
+    return {"business_id": business_id, "history": history}
