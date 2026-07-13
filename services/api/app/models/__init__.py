@@ -6,6 +6,8 @@ from app.models.graph import (
     Transaction,
     CashFlowEvent,
     ConsentToken,
+    ConsentAuditLog,
+    ScoreSnapshot,
 )
 
 __all__ = [
@@ -16,4 +18,6 @@ __all__ = [
     "Transaction",
     "CashFlowEvent",
     "ConsentToken",
+    "ConsentAuditLog",
+    "ScoreSnapshot",
 ]

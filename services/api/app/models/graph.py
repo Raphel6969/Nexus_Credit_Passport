@@ -178,13 +178,47 @@ class ConsentToken(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     business_id = Column(UUID(as_uuid=True), ForeignKey('businesses.id'), nullable=False)
     token = Column(String, unique=True, index=True, nullable=False)
-    scope = Column(String, nullable=False)                     # FULL_PROFILE / SCORE_ONLY / SNAPSHOT
-    status = Column(String, nullable=False)                    # ACTIVE / REVOKED / EXPIRED
+    scope = Column(String, nullable=False)             # FULL_PROFILE / SCORE_ONLY / SNAPSHOT
+    status = Column(String, nullable=False)            # ACTIVE / REVOKED / EXPIRED
+    # SNAPSHOT scope: score payload captured at mint time so lender sees
+    # the score-as-shared, not the current score
+    snapshot_data = Column(JSONB, nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
+    # Set when a SNAPSHOT token is first (and only) resolved
+    used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
     updated_at = Column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     business = relationship("Business")
+    audit_logs = relationship("ConsentAuditLog", back_populates="token", lazy="dynamic")
+
+
+class ConsentAuditLog(Base):
+    """
+    Append-only audit trail for every consent lifecycle event.
+
+    Actions: MINTED | RESOLVED | REVOKED | EXPIRED
+    Never update or delete rows — append only.
+    """
+    __tablename__ = 'consent_audit_log'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    token_id = Column(UUID(as_uuid=True), ForeignKey('consent_tokens.id'), nullable=False)
+    business_id = Column(UUID(as_uuid=True), ForeignKey('businesses.id'), nullable=False)
+    action = Column(String, nullable=False)            # MINTED | RESOLVED | REVOKED | EXPIRED
+    actor = Column(Text, nullable=True)                # business UUID | "resolver" | "system"
+    resolved_scope = Column(String, nullable=True)     # scope revealed on RESOLVED events
+    requester_ip = Column(Text, nullable=True)         # IP of resolver (RESOLVED events)
+    metadata = Column(JSONB, nullable=True)            # user-agent, extra context
+    created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
+
+    token = relationship("ConsentToken", back_populates="audit_logs")
+    business = relationship("Business")
+
+    __table_args__ = (
+        Index('ix_consent_audit_token_created', 'token_id', 'created_at'),
+        Index('ix_consent_audit_biz_action', 'business_id', 'action'),
+    )
 
 
 class ScoreSnapshot(Base):
