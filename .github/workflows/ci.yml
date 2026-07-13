@@ -14,9 +14,108 @@ jobs:
         service: [api, ingestion, scoring, web]
     steps:
       - uses: actions/checkout@v4
+      - name: Setup Python (for API service)
+        if: matrix.service == 'api'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.12'
+          cache: 'conda'
 
-      - name: Dummy Lint
-        run: echo "Linting ${{ matrix.service }} (stub)"
+      - name: Setup Node (for Web service)
+        if: matrix.service == 'web'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
 
-      - name: Dummy Test
-        run: echo "Testing ${{ matrix.service }} (stub)"
+      - name: Setup Go (for Ingestion service)
+        if: matrix.service == 'ingestion'
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.23'
+          cache: 'go'
+
+      - name: Setup Rust (for Scoring service)
+        if: matrix.service == 'scoring'
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          components: rustfmt, clippy
+          override: true
+
+      - name: Install dependencies (API)
+        if: matrix.service == 'api'
+        run: |
+          cd services/api
+          conda env create -f environment.yml || conda env update -f environment.yml
+          conda activate nexus-api
+          pip install -e .
+
+      - name: Install dependencies (Ingestion)
+        if: matrix.service == 'ingestion'
+        run: |
+          cd services/ingestion
+          go mod download
+
+      - name: Install dependencies (Scoring)
+        if: matrix.service == 'scoring'
+        run: |
+          cd services/scoring
+          cargo fetch
+
+      - name: Install dependencies (Web)
+        if: matrix.service == 'web'
+        run: |
+          cd apps/web
+          npm ci
+
+      - name: Run linting (API)
+        if: matrix.service == 'api'
+        run: |
+          cd services/api
+          conda activate nexus-api
+          pre-commit run --files $(git diff --name-only --diff-filter=AM HEAD^) || true
+
+      - name: Run linting (Ingestion)
+        if: matrix.service == 'ingestion'
+        run: |
+          cd services/ingestion
+          golangci-lint run ./...
+
+      - name: Run linting (Scoring)
+        if: matrix.service == 'scoring'
+        run: |
+          cd services/scoring
+          cargo fmt -- --check
+          cargo clippy -- -D warnings
+
+      - name: Run linting (Web)
+        if: matrix.service == 'web'
+        run: |
+          cd apps/web
+          npx prettier --check .
+
+      - name: Run tests (API)
+        if: matrix.service == 'api'
+        run: |
+          cd services/api
+          conda activate nexus-api
+          pytest tests/
+
+      - name: Run tests (Ingestion)
+        if: matrix.service == 'ingestion'
+        run: |
+          cd services/ingestion
+          go test ./...
+
+      - name: Run tests (Scoring)
+        if: matrix.service == 'scoring'
+        run: |
+          cd services/scoring
+          cargo test
+
+      - name: Run tests (Web)
+        if: matrix.service == 'web'
+        run: |
+          cd apps/web
+          npm test

@@ -1,9 +1,8 @@
-version: '3.8'
-
 services:
   postgres:
     image: postgres:16
     container_name: nexus-postgres
+    env_file: .env.local
     environment:
       POSTGRES_DB: nexus
       POSTGRES_USER: nexus
@@ -25,17 +24,20 @@ services:
       context: ./services/api
       dockerfile: Dockerfile
     container_name: nexus-api
+    env_file: .env.local
     environment:
       DATABASE_URL: postgresql+asyncpg://nexus:nexus@postgres:5432/nexus
-      API_KEY: ${API_KEY:-dev-secret-change-me}
-      ENVIRONMENT: development
+      SCORING_SERVICE_URL: http://scoring:8081
+      INGESTION_SERVICE_URL: http://ingestion:8080
     ports:
       - "8000:8000"
+    volumes:
+      - ./services/api:/app
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -48,16 +50,17 @@ services:
       context: ./services/ingestion
       dockerfile: Dockerfile
     container_name: nexus-ingestion
+    env_file: .env.local
     environment:
-      DATABASE_URL: postgres://nexus:nexus@postgres:5432/nexus
-      ENVIRONMENT: development
+      DATABASE_URL_GO: postgres://nexus:nexus@postgres:5432/nexus
+      SETU_BASE_URL: http://setu-mock:9090
     ports:
       - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -70,14 +73,9 @@ services:
       context: ./services/scoring
       dockerfile: Dockerfile
     container_name: nexus-scoring
-    environment:
-      DATABASE_URL: postgres://nexus:nexus@postgres:5432/nexus
-      ENVIRONMENT: development
+    env_file: .env.local
     ports:
       - "8081:8081"
-    depends_on:
-      postgres:
-        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/healthz"]
       interval: 10s
@@ -87,21 +85,33 @@ services:
     networks:
       - nexus-network
 
+  setu-mock:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile.mock
+    container_name: nexus-setu-mock
+    ports:
+      - "9090:9090"
+    networks:
+      - nexus-network
+
   web:
     build:
       context: ./apps/web
       dockerfile: Dockerfile
     container_name: nexus-web
+    env_file: .env.local
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
-      ENVIRONMENT: development
+      HOSTNAME: 0.0.0.0
+      PORT: 3000
     ports:
       - "3000:3000"
     depends_on:
       api:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      test: ["CMD", "node", "-e", "http = require('http'); const req = http.get('http://127.0.0.1:3000/api/health', (res) => { if (res.statusCode === 200) process.exit(0); else process.exit(1); }); req.on('error', (err) => { process.exit(1); });"]
       interval: 10s
       timeout: 5s
       retries: 5

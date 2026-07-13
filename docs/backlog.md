@@ -7,22 +7,26 @@ Product & tech debt backlog. One item per line. Move to sprint when committed.
 - [x] Pre-commit hooks (ruff, black, gofmt, rustfmt, prettier, gitleaks)
 - [x] CI skeleton (lint + test stubs)
 
-## Phase 1 — Data Model
-- [ ] ADR 001: Financial graph schema (accounts, transactions, counterparties, cash-flow events, consent tokens)
-- [ ] Alembic migration for core schema
-- [ ] SQLAlchemy models in API service
-- [ ] Go structs in Ingestion service
-- [ ] sqlx models in Scoring service
+## Phase 1 — Data Model ✅
+- [x] ADR 001: Financial graph schema (accounts, transactions, counterparties, cash-flow events, consent tokens)
+- [x] Alembic migration for core schema (001_initial_schema)
+- [x] Alembic migration — Indian market fields (002_add_indian_market_fields)
+- [x] SQLAlchemy models in API service
+- [x] Go structs in Ingestion service
+- [x] Rust model structs in Scoring service (sqlx deferred to Phase 4)
 
 ## Phase 2 — First Vertical Slice (Setu AA Sandbox)
-- [ ] Setu AA sandbox connector (Go)
-- [ ] Normalization: raw FI → financial graph rows
-- [ ] API: consent flow endpoints (`/v1/consent/link`, `/v1/consent/status`)
-- [ ] API: sync trigger endpoint (`/v1/accounts/{id}/sync`)
-- [ ] Dummy XGBoost model in Rust (returns fixed score + fake SHAP)
-- [ ] API: score endpoint (`/v1/accounts/{id}/score`)
-- [ ] Web: bare page showing score number
-- [ ] API key middleware on all `/v1/*` routes
+- [ ] Mock Setu AA server (Go) — real response shape, swap via SETU_BASE_URL
+- [ ] Setu AA client (Go) — CreateConsent, CreateSession, GetFIData
+- [ ] Normalizer (Go) — Rebit floats→paise, IST timestamps, UPI VPA extraction
+- [ ] PII sealing (Go) — `filippo.io/age` sealed-box + HMAC blind index
+- [ ] pgx store (Go) — UpsertTransaction with dedup on `external_id_hmac`
+- [ ] Ingestion trigger — POST /v1/ingest/aa
+- [ ] Rust scoring stub — pure ScoringInput→ScoringOutput, no DB/network
+- [ ] FastAPI score proxy — GET /v1/businesses/{id}/score
+- [ ] FastAPI ingest proxy — POST /v1/businesses/{id}/ingest/aa
+- [ ] Next.js score dashboard — SVG gauge, last-synced timestamp
+- [ ] Universal root .env consolidation (single .env.example + .env.local)
 
 ## Phase 3 — Expand Data Sources
 - [ ] GSTN sandbox / synthetic connector
@@ -36,6 +40,7 @@ Product & tech debt backlog. One item per line. Move to sprint when committed.
 - [ ] SHAP integration in Rust scoring service
 - [ ] Human-readable driver formatting (strengths/weaknesses)
 - [ ] API returns structured explanation, not raw SHAP values
+- [ ] **DEFERRED DECISION: Rust data-access pattern** — direct `sqlx` to Postgres vs other. Routing through FastAPI would quietly re-introduce the trust-boundary problem (Python aggregating what it should never see). Direct DB access is the likely right call, but make it explicitly in Phase 4 with Phase 4 context, not by accident in Phase 2.
 
 ## Phase 5 — Consent & Distribution Layer
 - [ ] Scoped token model: full-profile / score-only / one-time-snapshot
