@@ -77,16 +77,24 @@ services:
       dockerfile: Dockerfile
     container_name: nexus-scoring
     env_file: .env.local
+    environment:
+      # Direct Postgres access — Phase 4 trust-boundary decision (see docs/backlog.md)
+      DATABASE_URL: postgres://nexus:nexus@postgres:5432/nexus
+      MODEL_PATH: /app/model/model_meta.json
     ports:
       - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8081/healthz"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 15s
     networks:
       - nexus-network
+
 
   setu-mock:
     build:
