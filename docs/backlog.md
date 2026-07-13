@@ -34,13 +34,23 @@ Product & tech debt backlog. One item per line. Move to sprint when committed.
 - [ ] Tally/Zoho accounting connector (pick one)
 - [ ] Connector interface standardization (revisit Phase 2 pattern)
 
-## Phase 4 — Real Scoring & Explainability
-- [ ] Training pipeline (separate repo/notebook) on public MSME proxy data
-- [ ] CatBoost/XGBoost model artifact + versioning
-- [ ] SHAP integration in Rust scoring service
-- [ ] Human-readable driver formatting (strengths/weaknesses)
-- [ ] API returns structured explanation, not raw SHAP values
-- [ ] **DEFERRED DECISION: Rust data-access pattern** — direct `sqlx` to Postgres vs other. Routing through FastAPI would quietly re-introduce the trust-boundary problem (Python aggregating what it should never see). Direct DB access is the likely right call, but make it explicitly in Phase 4 with Phase 4 context, not by accident in Phase 2.
+## Phase 4 — Real Scoring & Explainability ✅
+- [x] Synthetic MSME training pipeline (`infra/scripts/train_model.py`) — 3K records, 4 tiers
+- [x] Ridge regression model + z-score normalization → `services/scoring/model/model_meta.json`
+- [x] Rust data-access pattern RESOLVED: direct `sqlx` to Postgres from scoring service
+- [x] 12-feature extractor (`src/features/extractor.rs`) — direct Postgres queries, no PII columns
+- [x] SHAP integration (exact linear SHAP: contribution_i = coeff_i × z_score_i)
+- [x] Human-readable driver formatting — top-5 strengths + top-3 weaknesses with plain-English notes
+- [x] Scoring engine (`src/score/engine.rs`) — loads JSON model, linear inference
+- [x] API returns structured explanation: score + confidence + drivers[]
+- [x] score_snapshots table (migration 004) — append-only audit log with JSONB drivers
+- [x] GET /v1/businesses/{id}/score/history — scoring trend endpoint for Phase 6 dashboard
+
+### Phase 4 Tech Debt / Future Upgrade
+- [ ] Upgrade model to XGBoost on real MSME dataset (architecture already supports it — swap model_meta.json)
+- [ ] TreeSHAP (exact) when tree model is in use; current linear SHAP is already exact for Ridge
+- [ ] Revenue consistency: replace proxy with real monthly std-dev CTE query
+- [ ] Score caching: serve cached snapshot on GET without calling Rust every time (Phase 7 hardening)
 
 ## Phase 5 — Consent & Distribution Layer
 - [ ] Scoped token model: full-profile / score-only / one-time-snapshot

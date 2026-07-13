@@ -10,23 +10,31 @@ Nexus Credit Passport is a multi-service platform designed to ingest financial d
 
 1. **FastAPI (Python)**: The public-facing API layer. Handles client requests, authentication, and acts as a proxy to internal services.
 2. **Ingestion Service (Go)**: High-throughput data ingestion pipeline. Connects to external data sources (e.g., Setu AA, GSTN), normalizes payloads, asymmetrically encrypts PII, and handles Postgres upserts.
-3. **Scoring Service (Rust)**: The credit scoring engine. Reads aggregated (non-PII) or decrypted (via private key) data to run ML models and return scores with confidence bands.
+3. **Scoring Service (Rust)**: The credit scoring engine. Reads aggregated (non-PII) data **directly from Postgres** to run the ML model and return scores with SHAP-style driver breakdown.
 4. **PostgreSQL**: The central database. Stores relational data, encrypted PII payloads, and blind-indexed hashes.
 
 ---
 
 ## 📜 Completed Phases
 
-### Phase 1: Project Initialization & API Baseline
+### Phase 0: Environment & Skeleton
+**Goal:** Establish repo skeleton, CI, and local dev stack.
+- Full repo structure, conda envs, Docker Compose with Postgres.
+- Pre-commit hooks: ruff, black, gofmt, rustfmt, prettier, gitleaks.
+- CI skeleton on GitHub Actions.
+- **Deliverable:** `docker-compose up` brings up empty Postgres + 4 services with `/healthz`.
+
+### Phase 1: Data Model
 **Goal:** Establish the core infrastructure and API schema.
 - **Tech Stack Chosen:** FastAPI (Python), PostgreSQL, Docker Compose.
 - **Database Driver:** Used `asyncpg` with SQLAlchemy for high-performance async DB access in Python.
 - **API Endpoints:** Created baseline routing for `/businesses`, `/ingest`, and `/score`.
+- **Schema:** ADR 001 written. Migrations 001 (initial schema) and 002 (Indian market fields).
 - **Outcome:** A functional Dockerized API capable of managing business records.
 
 ### Phase 2: Setu AA Integration & PII Strategy
 **Goal:** Integrate the first major data source (Setu Account Aggregator) and define the PII protection strategy.
-- **Microservices Introduced:** Decided to split ingestion to **Go** (for fast JSON/XML stream parsing) and scoring to **Rust** (for performance and ML interoperability).
+- **Microservices Introduced:** Split ingestion to **Go** (for fast JSON/XML stream parsing) and scoring to **Rust** (for performance and ML interoperability).
 - **PII Encryption (age):** Implemented asymmetric encryption using `age`. The Go Ingestion Service holds the **Public Key** to encrypt sensitive data (e.g., transaction narrations). Only the Rust Scoring Service holds the **Private Key** to decrypt data if needed. The API layer never sees plaintext PII.
 - **Deduplication (HMAC Blind Indexing):** To safely deduplicate transactions without storing raw IDs, we implemented a keyed HMAC blind index (SHA-256).
 - **Outcome:** Go service can pull mock Setu AA data, encrypt PII, and insert it into Postgres. A basic heuristic Rust scoring stub was created.
@@ -36,37 +44,91 @@ Nexus Credit Passport is a multi-service platform designed to ingest financial d
 - **Connector Standardization:** Refactored to a strict `SourceConnector` interface.
 - **Single PII Chokepoint:** Built a centralized `Orchestrator` in Go. Connectors return plaintext generic formats (`RawTransaction`, `RawCounterparty`); the Orchestrator passes them through a single `pii.Processor` before hitting the database. This prevents individual connectors from leaking PII or rolling their own encryption.
 - **Revenue Double-Counting Prevention:** Added `revenue_role` to the `transactions` table. Bank accounts (AA) act as the `primary` source of truth for cash flow, while Razorpay/GSTN act as `informational` or `tax_summary` to prevent duplicate aggregate calculations.
-- **Database Schema Expansion:** Added `tax_filings`, `invoices`, and `cash_flow_events` tables. Updated `counterparties` to support cross-source matching (`source_type`, `identifier_hmac`).
+- **Database Schema Expansion (Migration 003):** Added `tax_filings`, `invoices`, and `cash_flow_events` tables. Updated `counterparties` to support cross-source matching (`source_type`, `identifier_hmac`).
 - **Outcome:** The pipeline successfully ingests data concurrently from Setu AA, GSTN, Razorpay, and Zoho Books mock servers, encrypts PII universally, and evaluates a multi-source credit score.
+
+### Phase 4: Real Scoring & Explainability ✅
+**Goal:** Replace the heuristic stub with a real ML-trained model and SHAP-style driver attribution.
+
+#### Key Decisions Made
+
+**Rust data-access pattern (Phase 2 deferred decision — resolved):**
+The Rust scoring service now queries Postgres **directly via sqlx**. This resolves the deferred decision from Phase 2: routing feature aggregation through the Python API would have violated the trust boundary (Python aggregating what it should never see). The API layer sends only `{ business_id }` and receives the derived score output.
+
+**Model architecture:**
+- **Training:** `infra/scripts/train_model.py` generates 3,000 synthetic Indian MSME records across 4 credit tiers (stressed/average/good/excellent) and trains a **Ridge regression** model on 12 named features.
+- **Serialization:** Model coefficients + normalization parameters (z-score means/stds) exported to `services/scoring/model/model_meta.json` — a plain, diffable JSON file.
+- **Inference:** Rust loads `model_meta.json` at startup; no external ML runtime required. Score = clamp(intercept + Σ coeff_i × z_score_i, 300, 850).
+- **SHAP:** For linear models, SHAP is exact: `contribution_i = coeff_i × z_score_i`. No approximation needed.
+
+**Why Ridge regression + JSON (not XGBoost + ONNX):**
+- Zero ML-runtime dependency in Rust (no libonnxruntime.so, no C++ bindings)
+- Linear SHAP is mathematically exact
+- Model artifact is plain JSON — readable, diffable, version-controlled
+- Architecture is identical to what a tree ensemble would use; swapping to XGBoost is a deployment-time change when real MSME data is available
+
+#### Features Extracted (12 named features, all non-PII):
+| # | Feature | Source |
+|---|---------|--------|
+| 0 | `total_transactions` | transactions table |
+| 1 | `upi_ratio` | transactions.mode = 'UPI' |
+| 2 | `credit_debit_ratio` | SUM credits / SUM debits (capped 3.0) |
+| 3 | `nach_debit_count` | transactions.mode = 'NACH' AND type = 'DEBIT' |
+| 4 | `avg_monthly_revenue_lakh` | SUM primary credits / data_window_months |
+| 5 | `gst_compliance_ratio` | filed_count / total_filings |
+| 6 | `gst_turnover_lakh` | SUM tax_filings.gross_turnover |
+| 7 | `current_balance_lakh` | accounts.balance (latest) |
+| 8 | `invoice_overdue_ratio` | overdue_receivables / total_receivables |
+| 9 | `data_window_months` | MAX(txn.timestamp) - MIN(txn.timestamp) |
+| 10 | `transaction_velocity` | total_transactions / data_window_months |
+| 11 | `revenue_consistency` | proxy from cf_ratio and NACH count |
+
+#### New Files (Phase 4):
+- `infra/scripts/train_model.py` — synthetic data generator + Ridge training + JSON export
+- `services/scoring/model/model_meta.json` — serialized model (committed; rebuilt by running the training script)
+- `services/scoring/src/features/extractor.rs` — direct Postgres feature extraction (sqlx)
+- `services/scoring/src/score/engine.rs` — model loader, linear inference, SHAP computation
+- `services/scoring/src/explain/mod.rs` — ScoreDriver struct, format_drivers(), human notes for all 12 features
+- `services/api/alembic/versions/004_score_cache.py` — score_snapshots migration
+- `services/api/app/models/graph.py` — ScoreSnapshot ORM model added
+
+#### API Response (Phase 4):
+```json
+{
+  "business_id": "...",
+  "score": 712,
+  "confidence": "HIGH",
+  "note": "Score computed by Nexus Credit Passport linear-v1.0.0...",
+  "model_version": "linear-v1.0.0",
+  "drivers": [
+    {
+      "feature": "gst_compliance_ratio",
+      "label": "GST Filing Compliance",
+      "direction": "positive",
+      "impact": 28.5,
+      "raw_value": 0.95,
+      "human_note": "95% GST filings submitted on time — strong tax compliance record; lenders view this favourably."
+    },
+    ...
+  ]
+}
+```
+
+Also added: `GET /v1/businesses/{id}/score/history` — returns scoring history for Phase 6 trend chart.
 
 ---
 
-## 🚀 Phase 4: Backlog & Next Steps (To Be Executed)
+## 🚀 Phase 5: Consent & Distribution Layer (Next)
 
-Phase 4 focuses on closing out edge-case integrations, moving from polling to real-time streams, and upgrading the scoring engine to a true Machine Learning model.
-
-### 1. Tally ERP Offline Integration
-- **Context:** Many Indian MSMEs use offline Tally ERP. 
-- **Task:** Build a FastAPI endpoint to accept Tally XML dump uploads. The file must be securely passed to the Go Ingestion service.
-- **Go Connector:** Implement a `tally/connector.go` that parses the heavy XML schema, normalizes Vouchers and Ledgers, and feeds them into the central Orchestrator.
-
-### 2. Real-time Webhooks (Razorpay)
-- **Context:** Currently, data is fetched via polling (`Sync()`). We want real-time updates for payment gateways.
-- **Task:** Add webhook receivers in FastAPI (with signature validation). Forward validated payloads to a new `webhook.go` processor in the Ingestion service to update Postgres instantly.
-
-### 3. Data Reconciliation Engine
-- **Context:** We now have counterparties and transactions from multiple sources (e.g., a Razorpay payout vs. an AA bank deposit).
-- **Task:** Build an automated reconciliation engine to merge duplicate counterparties using fuzzy matching or exact HMAC identifier matching, ensuring a unified ledger.
-
-### 4. ML Model Implementation (Rust)
-- **Context:** The current Rust scoring engine is a heuristic stub (`src/score/stub.rs`).
-- **Task:** Replace the stub with a real Machine Learning pipeline. 
-- **Tech Options:** Integrate ONNX Runtime (`ort` crate) or `linfa` to load a pre-trained CatBoost/XGBoost model.
-- **Explainability:** Implement SHAP (SHapley Additive exPlanations) values to populate the `note` field, providing MSMEs with human-readable reasons for their credit score.
+- Scoped revocable token model: full-profile / score-only / one-time-snapshot
+- Token mint (`POST /v1/shares`), resolve (`GET /v1/shares/{token}`), revoke (`DELETE /v1/shares/{token}`)
+- Audit log for all consent actions
+- Expiry & rotation policies
 
 ---
 
 ## 🔑 Crucial Rules for Agents & Developers
 1. **Never Bypass the PII Chokepoint:** Any new data connector must return plaintext structs to the `orchestrator.go`. **Do not** manually call `age.Encrypt()` inside a connector.
 2. **Strict Secrets Separation:** The `AGE_PRIVATE_KEY` must never be loaded into the Python API or Go Ingestion environments. It belongs strictly to the Rust Scoring Service.
-3. **Plan Before Modifying:** If adding a new data source or altering the schema, write an `implementation_plan.md` and get approval. Never silently make architectural shifts.
+3. **Feature extraction stays in Rust:** The Rust scoring service is the only service permitted to read raw transaction aggregates for ML purposes. The Python API layer must not replicate this logic.
+4. **Plan Before Modifying:** If adding a new data source or altering the schema, write an `implementation_plan.md` and get approval. Never silently make architectural shifts.
