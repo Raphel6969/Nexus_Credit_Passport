@@ -116,14 +116,25 @@ The Rust scoring service now queries Postgres **directly via sqlx**. This resolv
 
 Also added: `GET /v1/businesses/{id}/score/history` — returns scoring history for Phase 6 trend chart.
 
+### Phase 5: Consent & Distribution Layer ✅
+**Goal:** Implement the distribution layer to allow businesses to share their passport with lenders securely and dynamically.
+- **Opaque URL-Safe Tokens:** Used `secrets.token_urlsafe(32)` to generate opaque random share links instead of JWTs, preventing metadata leakage.
+- **Three Scopes Supported:**
+  - `SCORE_ONLY`: Returns business name and score metrics only (no drivers, no metadata).
+  - `FULL_PROFILE`: Returns the full dynamic score profile, including all SHAP drivers and metadata.
+  - `SNAPSHOT`: A one-time-use snapshot. Bakes the score and driver data into the token at mint-time. The token immediately expires and marks itself as used after the first successful resolution.
+- **Append-Only Audit Log:** Created `consent_audit_log` table (migration 005) to track all `MINTED`, `RESOLVED`, `REVOKED`, and `EXPIRED` events with requester IPs and timestamps.
+- **Public Resolver Endpoint:** `GET /v1/shares/{token}` is intentionally public and unauthenticated. The token acts as the credential. Protected endpoints (`POST /v1/shares`, `DELETE /v1/shares/{token}`, and `GET /v1/businesses/{id}/shares`) require `X-API-Key`.
+
 ---
 
-## 🚀 Phase 5: Consent & Distribution Layer (Next)
-
-- Scoped revocable token model: full-profile / score-only / one-time-snapshot
-- Token mint (`POST /v1/shares`), resolve (`GET /v1/shares/{token}`), revoke (`DELETE /v1/shares/{token}`)
-- Audit log for all consent actions
-- Expiry & rotation policies
+## 🚀 Phase 6: UI Pass (Neumorphic Dashboard) (Next)
+- NeuCard, NeuButton, NeuGauge, NeuToggle components
+- Login / consent linking screen
+- Dashboard: centered score gauge (neu gauge)
+- Score driver panel (strengths/weaknesses from SHAP)
+- Share Passport panel with scope toggles
+- Tailwind config with navy/teal/gold palette
 
 ---
 
@@ -132,3 +143,4 @@ Also added: `GET /v1/businesses/{id}/score/history` — returns scoring history 
 2. **Strict Secrets Separation:** The `AGE_PRIVATE_KEY` must never be loaded into the Python API or Go Ingestion environments. It belongs strictly to the Rust Scoring Service.
 3. **Feature extraction stays in Rust:** The Rust scoring service is the only service permitted to read raw transaction aggregates for ML purposes. The Python API layer must not replicate this logic.
 4. **Plan Before Modifying:** If adding a new data source or altering the schema, write an `implementation_plan.md` and get approval. Never silently make architectural shifts.
+

@@ -52,13 +52,14 @@ Product & tech debt backlog. One item per line. Move to sprint when committed.
 - [ ] Revenue consistency: replace proxy with real monthly std-dev CTE query
 - [ ] Score caching: serve cached snapshot on GET without calling Rust every time (Phase 7 hardening)
 
-## Phase 5 — Consent & Distribution Layer
-- [ ] Scoped token model: full-profile / score-only / one-time-snapshot
-- [ ] Token minting endpoint (`POST /v1/shares`)
-- [ ] Token resolution endpoint (`GET /v1/shares/{token}`) — no auth, token in URL
-- [ ] Revocation endpoint (`DELETE /v1/shares/{token}`)
-- [ ] Audit log for all consent actions
-- [ ] Expiry & rotation policies
+## Phase 5 — Consent & Distribution Layer ✅
+- [x] Scoped token model: full-profile / score-only / one-time-snapshot
+- [x] Token minting endpoint (`POST /v1/shares`)
+- [x] Token resolution endpoint (`GET /v1/shares/{token}`) — no auth, token in URL
+- [x] Revocation endpoint (`DELETE /v1/shares/{token}`)
+- [x] Audit log for all consent actions (`consent_audit_log` table)
+- [x] Expiry & rotation policies (TTL config on minting)
+
 
 ## Phase 6 — UI Pass (Neumorphic Dashboard)
 - [ ] NeuCard, NeuButton, NeuGauge, NeuToggle components
