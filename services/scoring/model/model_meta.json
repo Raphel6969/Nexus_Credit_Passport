@@ -1,0 +1,87 @@
+{
+  "model_version": "linear-v1.0.0",
+  "model_type": "ridge_regression",
+  "description": "Calibrated credit scoring model trained on synthetic Indian MSME proxy data. Coefficients represent feature weights learned from data (not hand-tuned rules). SHAP attribution is exact for linear models: contribution_i = coeff_i * z_score_i.",
+  "n_features": 12,
+  "feature_names": [
+    "total_transactions",
+    "upi_ratio",
+    "credit_debit_ratio",
+    "nach_debit_count",
+    "avg_monthly_revenue_lakh",
+    "gst_compliance_ratio",
+    "gst_turnover_lakh",
+    "current_balance_lakh",
+    "invoice_overdue_ratio",
+    "data_window_months",
+    "transaction_velocity",
+    "revenue_consistency"
+  ],
+  "feature_labels": {
+    "total_transactions": "Transaction Volume",
+    "upi_ratio": "UPI Adoption Rate",
+    "credit_debit_ratio": "Cash Flow Ratio (Credits/Debits)",
+    "nach_debit_count": "NACH/EMI Commitments",
+    "avg_monthly_revenue_lakh": "Average Monthly Revenue",
+    "gst_compliance_ratio": "GST Filing Compliance",
+    "gst_turnover_lakh": "Annual GST Turnover",
+    "current_balance_lakh": "Current Account Balance",
+    "invoice_overdue_ratio": "Invoice Overdue Rate",
+    "data_window_months": "Data Coverage (months)",
+    "transaction_velocity": "Transaction Velocity (txns/month)",
+    "revenue_consistency": "Revenue Consistency"
+  },
+  "intercept": 603.261136831892,
+  "coefficients": [
+    19.25428143061016,
+    32.476295533662274,
+    39.10525575109306,
+    -33.806469149376134,
+    21.08387271719463,
+    14.191496173532043,
+    -9.746678254943546,
+    -5.533012339755522,
+    -40.677699333420705,
+    -0.017256365875406736,
+    0.0583932330426138,
+    -9.62788860534157
+  ],
+  "feature_means": [
+    98.01866666666666,
+    0.47750946672247124,
+    1.18051483000832,
+    4.102,
+    27.55138323867705,
+    0.6425224122735803,
+    250.20451868504293,
+    192.841261973197,
+    0.21742769863921438,
+    14.903834875706142,
+    7.6066156638404125,
+    0.09387271835356004
+  ],
+  "feature_stds": [
+    91.1006091356632,
+    0.20537493423536757,
+    0.35250228379880605,
+    3.262554622786677,
+    36.412669476786725,
+    0.3191958257643808,
+    383.03087447423974,
+    464.00822980848267,
+    0.17579240089952436,
+    5.206075930367499,
+    8.340844994825598,
+    0.160029609494035
+  ],
+  "score_clamp": {
+    "min": 300.0,
+    "max": 850.0
+  },
+  "training": {
+    "n_samples": 3000,
+    "seed": 42,
+    "rmse": 38.64,
+    "sklearn_used": true
+  }
+}
