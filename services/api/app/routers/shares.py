@@ -7,6 +7,7 @@ from pydantic import BaseModel
 
 from app.core.db import get_db
 from app.core.config import settings
+from app.core.deps import verify_api_key
 from app.consent.tokens import mint_token, resolve_token, revoke_token
 from app.models.graph import ConsentToken
 
@@ -16,7 +17,7 @@ class MintTokenRequest(BaseModel):
     scope: str
     ttl_hours: int = 72
 
-@router.post("/shares")
+@router.post("/shares", dependencies=[Depends(verify_api_key)])
 async def create_share_token(
     business_id: str,
     req: MintTokenRequest,
@@ -42,7 +43,7 @@ async def create_share_token(
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.get("/businesses/{business_id}/shares")
+@router.get("/businesses/{business_id}/shares", dependencies=[Depends(verify_api_key)])
 async def list_share_tokens(
     business_id: str,
     db: AsyncSession = Depends(get_db)
@@ -69,7 +70,7 @@ async def list_share_tokens(
     }
 
 
-@router.delete("/shares/{token}")
+@router.delete("/shares/{token}", dependencies=[Depends(verify_api_key)])
 async def revoke_share_token(
     token: str,
     business_id: str,

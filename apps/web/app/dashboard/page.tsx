@@ -1,211 +1,249 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import ScoreGauge from './ScoreGauge';
+import React, { useEffect, useState, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { NeuCard } from '../../components/ui/NeuCard';
+import { NeuButton } from '../../components/ui/NeuButton';
+import { NeuGauge } from '../../components/ui/NeuGauge';
+import { NeuToggle } from '../../components/ui/NeuToggle';
 
-interface ScoreData {
-  business_id: string;
-  score: number;
-  confidence: string;
-  note: string;
-  model_version: string;
+interface ScoreDriver {
+  feature: string;
+  label: string;
+  direction: 'positive' | 'negative';
+  impact: number;
+  raw_value: number;
+  human_note: string;
 }
 
-export default function Dashboard() {
+interface ScoreData {
+  score: number;
+  confidence: string;
+  model_version: string;
+  drivers: ScoreDriver[];
+}
+
+function DashboardContent() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const businessId = searchParams.get('businessId');
+
   const [scoreData, setScoreData] = useState<ScoreData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [noData, setNoData] = useState(false);
+  const [error, setError] = useState('');
 
-  const businessId = '00000000-0000-0000-0000-000000000001'; // Mock Business UUID
-
-  const fetchScore = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      setNoData(false);
-      const res = await fetch('/api/score');
-      if (res.status === 404) {
-        setNoData(true);
-        setScoreData(null);
-      } else if (!res.ok) {
-        throw new Error('Failed to load score data');
-      } else {
-        const data = await res.json();
-        setScoreData(data);
-      }
-    } catch (err: any) {
-      setError(err.message || 'An error occurred');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSync = async () => {
-    try {
-      setSyncing(true);
-      setError(null);
-      const res = await fetch('/api/ingest', { method: 'POST' });
-      if (!res.ok) {
-        throw new Error('Failed to trigger Setu AA ingestion');
-      }
-      // Wait 1.5s for write simulation, then refresh score
-      setTimeout(async () => {
-        await fetchScore();
-        setSyncing(false);
-      }, 1500);
-    } catch (err: any) {
-      setError(err.message || 'An error occurred during sync');
-      setSyncing(false);
-    }
-  };
+  const [shareScope, setShareScope] = useState<'SCORE_ONLY' | 'FULL_PROFILE' | 'SNAPSHOT'>('SCORE_ONLY');
+  const [mintingToken, setMintingToken] = useState(false);
+  const [shareLink, setShareLink] = useState('');
 
   useEffect(() => {
+    if (!businessId) {
+      router.push('/login');
+      return;
+    }
+
+    const fetchScore = async () => {
+      try {
+        const res = await fetch(`/api/businesses/${businessId}/score`, {
+          headers: {
+            'X-API-Key': 'dev-secret-change-me-in-prod',
+          }
+        });
+        if (!res.ok) {
+          throw new Error('Failed to fetch score or no data exists.');
+        }
+        const data = await res.json();
+        setScoreData(data);
+      } catch (err: any) {
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     fetchScore();
-  }, []);
+  }, [businessId, router]);
+
+  const handleMintToken = async () => {
+    if (!businessId) return;
+    setMintingToken(true);
+    setShareLink('');
+    try {
+      const res = await fetch(`/api/shares?business_id=${businessId}`, {
+        method: 'POST',
+        headers: {
+          'X-API-Key': 'dev-secret-change-me-in-prod',
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          scope: shareScope,
+          ttl_hours: 72
+        })
+      });
+      if (!res.ok) throw new Error('Failed to mint token');
+      const data = await res.json();
+      
+      // Assume frontend is hosted at same origin
+      const link = `${window.location.origin}/api/shares/${data.token}`;
+      setShareLink(link);
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setMintingToken(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-brand-navy text-white">
+        Loading passport...
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-brand-navy p-6">
+        <NeuCard className="text-center max-w-md w-full">
+          <p className="text-red-400 mb-6">{error}</p>
+          <NeuButton onClick={() => router.push('/login')}>Go Back</NeuButton>
+        </NeuCard>
+      </div>
+    );
+  }
 
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-teal-500/30">
-      {/* Header */}
-      <header className="border-b border-slate-900 bg-slate-950/80 backdrop-blur-md sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-teal-500 to-emerald-400 flex items-center justify-center font-bold text-slate-950">
-              N
-            </div>
-            <span className="font-bold text-lg tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
-              Nexus Credit Passport
-            </span>
+    <main className="min-h-screen p-6 md:p-12 bg-brand-navy text-white">
+      <div className="max-w-6xl mx-auto space-y-8">
+        
+        {/* Header */}
+        <header className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-gray-700/50">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight">Business Passport</h1>
+            <p className="text-gray-400 font-mono text-sm mt-1">{businessId}</p>
           </div>
-          <div className="flex items-center gap-4 text-xs">
-            <span className="px-2.5 py-1 rounded-full bg-slate-900 border border-slate-800 text-slate-400 font-mono">
-              Business ID: {businessId.slice(0, 8)}...
-            </span>
+          <NeuButton onClick={() => router.push('/login')} variant="secondary" className="mt-4 md:mt-0">
+            Sign Out
+          </NeuButton>
+        </header>
+
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Left Column: Score Gauge & Sharing */}
+          <div className="space-y-8 lg:col-span-1">
+            <NeuCard className="flex flex-col items-center py-10">
+              <NeuGauge score={scoreData?.score || 0} maxScore={1000} label="Credit Score" />
+              
+              <div className="mt-8 text-center space-y-1">
+                <p className="text-gray-400 uppercase tracking-widest text-xs font-semibold">Confidence</p>
+                <p className="text-brand-gold font-medium">{scoreData?.confidence}</p>
+              </div>
+            </NeuCard>
+
+            <NeuCard className="space-y-6">
+              <div>
+                <h3 className="text-lg font-semibold mb-1">Share Passport</h3>
+                <p className="text-sm text-gray-400">Generate a secure token for lenders.</p>
+              </div>
+
+              <div className="space-y-4">
+                <div className="flex flex-col space-y-3 p-4 bg-brand-navy shadow-neu-down rounded-xl">
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="scope" 
+                      checked={shareScope === 'SCORE_ONLY'} 
+                      onChange={() => setShareScope('SCORE_ONLY')}
+                      className="text-brand-teal focus:ring-brand-teal"
+                    />
+                    <span className="text-sm text-gray-200">Score Only (72h)</span>
+                  </label>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="scope" 
+                      checked={shareScope === 'FULL_PROFILE'} 
+                      onChange={() => setShareScope('FULL_PROFILE')}
+                      className="text-brand-teal focus:ring-brand-teal"
+                    />
+                    <span className="text-sm text-gray-200">Full Profile (72h)</span>
+                  </label>
+                  <label className="flex items-center space-x-3 cursor-pointer">
+                    <input 
+                      type="radio" 
+                      name="scope" 
+                      checked={shareScope === 'SNAPSHOT'} 
+                      onChange={() => setShareScope('SNAPSHOT')}
+                      className="text-brand-teal focus:ring-brand-teal"
+                    />
+                    <span className="text-sm text-gray-200">One-Time Snapshot</span>
+                  </label>
+                </div>
+
+                <NeuButton onClick={handleMintToken} disabled={mintingToken} className="w-full">
+                  {mintingToken ? 'Minting...' : 'Mint Token'}
+                </NeuButton>
+
+                {shareLink && (
+                  <div className="mt-4 p-3 bg-brand-navy shadow-neu-down rounded-lg overflow-x-auto">
+                    <p className="text-xs text-gray-400 mb-1">Share Link (Public Resolver):</p>
+                    <code className="text-sm text-brand-teal select-all">{shareLink}</code>
+                  </div>
+                )}
+              </div>
+            </NeuCard>
+          </div>
+
+          {/* Right Column: Drivers */}
+          <div className="lg:col-span-2">
+            <NeuCard className="h-full">
+              <h2 className="text-xl font-bold mb-6">Score Drivers</h2>
+              <div className="space-y-4">
+                {scoreData?.drivers?.map((driver, idx) => (
+                  <div key={idx} className="bg-brand-navy shadow-neu-up-sm rounded-xl p-5 flex flex-col md:flex-row md:items-start gap-4">
+                    
+                    {/* Direction Icon / Impact Badge */}
+                    <div className="flex-shrink-0 pt-1">
+                      {driver.direction === 'positive' ? (
+                        <div className="w-12 h-12 rounded-full bg-brand-navy shadow-neu-up flex items-center justify-center text-brand-teal font-bold">
+                          +{driver.impact.toFixed(1)}
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-full bg-brand-navy shadow-neu-down flex items-center justify-center text-brand-gold font-bold">
+                          {driver.impact.toFixed(1)}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex-1 space-y-1">
+                      <div className="flex justify-between items-center">
+                        <h4 className="font-semibold text-lg">{driver.label}</h4>
+                        <span className="text-xs font-mono text-gray-500 bg-brand-navy shadow-neu-down px-2 py-1 rounded">
+                          raw: {driver.raw_value.toFixed(2)}
+                        </span>
+                      </div>
+                      <p className="text-gray-300 text-sm leading-relaxed pt-1">
+                        {driver.human_note}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                
+                {(!scoreData?.drivers || scoreData.drivers.length === 0) && (
+                  <p className="text-gray-500 italic text-center py-10">No drivers available.</p>
+                )}
+              </div>
+            </NeuCard>
           </div>
         </div>
-      </header>
+      </div>
+    </main>
+  );
+}
 
-      {/* Main Content */}
-      <main className="flex-1 max-w-4xl mx-auto w-full px-6 py-12 flex flex-col justify-center">
-        {loading && !syncing ? (
-          <div className="flex flex-col items-center justify-center py-24 gap-4">
-            <div className="w-10 h-10 border-4 border-teal-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-sm text-slate-400 animate-pulse">Retrieving Passport data...</span>
-          </div>
-        ) : noData ? (
-          /* Empty / Unconnected State */
-          <div className="bg-slate-900/40 border border-slate-900 rounded-3xl p-12 text-center flex flex-col items-center max-w-xl mx-auto shadow-2xl relative overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-b from-teal-500/5 to-transparent pointer-events-none" />
-            
-            <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center mb-6 text-teal-400 text-2xl">
-              🔑
-            </div>
-
-            <h2 className="text-2xl font-bold text-white mb-3">Create your Credit Passport</h2>
-            <p className="text-slate-400 text-sm leading-relaxed mb-8">
-              Nexus uses India&apos;s Account Aggregator framework to securely analyze your bank records. Connect your AA account to calculate your portable credit score.
-            </p>
-
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="w-full py-4 px-6 rounded-xl bg-gradient-to-r from-teal-500 to-emerald-400 hover:from-teal-400 hover:to-emerald-300 text-slate-950 font-bold text-sm tracking-wide shadow-lg shadow-teal-500/20 transition-all duration-300 hover:scale-[1.02] disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
-            >
-              {syncing ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                  <span>Ingesting Sandbox AA Rails...</span>
-                </>
-              ) : (
-                <span>Connect via Account Aggregator</span>
-              )}
-            </button>
-
-            {error && (
-              <p className="mt-4 text-xs text-rose-400 bg-rose-500/10 px-3 py-1.5 rounded-lg border border-rose-500/20">
-                {error}
-              </p>
-            )}
-          </div>
-        ) : (
-          /* Connected Dashboard State */
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 items-start">
-            {/* Left Column: Gauge */}
-            <div className="md:col-span-1 flex flex-col gap-6">
-              {scoreData && (
-                <ScoreGauge score={scoreData.score} confidence={scoreData.confidence} />
-              )}
-              
-              {/* Sync Trigger Action Card */}
-              <div className="p-5 bg-slate-900/30 border border-slate-900 rounded-2xl flex flex-col gap-4">
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider">AA Data Source</span>
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />
-                </div>
-                <div className="text-xs text-slate-400 leading-relaxed">
-                  Calculated using mock bank records simulated via Setu AA Sandbox APIs.
-                </div>
-                <button
-                  onClick={handleSync}
-                  disabled={syncing}
-                  className="w-full py-2.5 px-4 rounded-lg bg-slate-800 hover:bg-slate-700 text-white font-semibold text-xs transition-all duration-200 border border-slate-700 disabled:opacity-50 flex items-center justify-center gap-2"
-                >
-                  {syncing ? (
-                    <>
-                      <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                      <span>Syncing...</span>
-                    </>
-                  ) : (
-                    <span>Refresh Records</span>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            {/* Right Column: Passport Breakdown */}
-            <div className="md:col-span-2 flex flex-col gap-6">
-              {/* Business Identity */}
-              <div className="bg-slate-900/20 border border-slate-900 rounded-3xl p-6 flex flex-col gap-4">
-                <h3 className="text-sm font-bold tracking-wider text-slate-400 uppercase">Passport Identification</h3>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/50">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1">Company PAN Hash</span>
-                    <span className="font-mono text-xs text-slate-300">sha256_bcdef2345g...</span>
-                  </div>
-                  <div className="p-4 bg-slate-900/60 rounded-xl border border-slate-800/50">
-                    <span className="text-[10px] uppercase tracking-wider text-slate-500 block mb-1">GSTIN Verification</span>
-                    <span className="text-xs text-emerald-400 font-semibold flex items-center gap-1">
-                      <span>✓</span> Active GSTIN
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Scoring Summary Explanation */}
-              <div className="bg-slate-900/20 border border-slate-900 rounded-3xl p-6 flex flex-col gap-4">
-                <h3 className="text-sm font-bold tracking-wider text-slate-400 uppercase">Scoring Metadata</h3>
-                <div className="flex flex-col gap-3">
-                  <div className="flex justify-between items-center text-xs border-b border-slate-900 pb-2">
-                    <span className="text-slate-400">Model Engine</span>
-                    <span className="font-mono text-slate-200">{scoreData?.model_version}</span>
-                  </div>
-                  <div className="flex justify-between items-center text-xs border-b border-slate-900 pb-2">
-                    <span className="text-slate-400">Score Range</span>
-                    <span className="text-slate-200">300 - 850</span>
-                  </div>
-                  <div className="flex flex-col gap-1.5 text-xs pt-1">
-                    <span className="text-slate-400">Model Explanation / System Note</span>
-                    <p className="text-slate-300 leading-relaxed italic bg-slate-950/40 p-3 rounded-lg border border-slate-900">
-                      &quot;{scoreData?.note}&quot;
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-      </main>
-    </div>
+export default function DashboardPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-brand-navy" />}>
+      <DashboardContent />
+    </Suspense>
   );
 }
