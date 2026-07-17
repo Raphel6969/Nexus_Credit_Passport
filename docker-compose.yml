@@ -144,6 +144,8 @@ services:
     env_file: .env.local
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
+      INTERNAL_API_URL: http://api:8000
+      API_URL: http://api:8000
       HOSTNAME: 0.0.0.0
       PORT: 3000
     ports:

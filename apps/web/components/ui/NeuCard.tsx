@@ -4,11 +4,23 @@ interface NeuCardProps {
   children: React.ReactNode;
   className?: string;
   padding?: string;
+  inset?: boolean;
 }
 
-export function NeuCard({ children, className = '', padding = 'p-6' }: NeuCardProps) {
+export function NeuCard({
+  children,
+  className = '',
+  padding = 'p-6',
+  inset = false,
+}: NeuCardProps) {
   return (
-    <div className={`bg-brand-navy rounded-2xl shadow-neu-up ${padding} ${className}`}>
+    <div
+      className={`
+        rounded-2xl bg-neu-surface
+        ${inset ? 'shadow-neu-inset' : 'shadow-neu-raised'}
+        ${padding} ${className}
+      `}
+    >
       {children}
     </div>
   );

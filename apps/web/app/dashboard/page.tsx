@@ -2,26 +2,31 @@
 
 import React, { useEffect, useState, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { AppShell, LoadingState, ErrorState } from '../../components/layout/AppShell';
 import { NeuCard } from '../../components/ui/NeuCard';
 import { NeuButton } from '../../components/ui/NeuButton';
 import { NeuGauge } from '../../components/ui/NeuGauge';
-import { NeuToggle } from '../../components/ui/NeuToggle';
+import { NeuSegmentedControl } from '../../components/ui/NeuSegmentedControl';
+import { ScoreDriverList } from '../../components/ui/ScoreDriverList';
+import {
+  fetchScore,
+  mintShareToken,
+  type ScoreData,
+} from '../../lib/api';
 
-interface ScoreDriver {
-  feature: string;
-  label: string;
-  direction: 'positive' | 'negative';
-  impact: number;
-  raw_value: number;
-  human_note: string;
-}
+type ShareScope = 'score' | 'profile' | 'snapshot';
 
-interface ScoreData {
-  score: number;
-  confidence: string;
-  model_version: string;
-  drivers: ScoreDriver[];
-}
+const SCOPE_OPTIONS = [
+  { value: 'score' as const, label: 'Score Only' },
+  { value: 'profile' as const, label: 'Full Profile' },
+  { value: 'snapshot' as const, label: 'Snapshot' },
+];
+
+const SCOPE_MAP: Record<ShareScope, 'SCORE_ONLY' | 'FULL_PROFILE' | 'SNAPSHOT'> = {
+  score: 'SCORE_ONLY',
+  profile: 'FULL_PROFILE',
+  snapshot: 'SNAPSHOT',
+};
 
 function DashboardContent() {
   const searchParams = useSearchParams();
@@ -32,9 +37,10 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const [shareScope, setShareScope] = useState<'SCORE_ONLY' | 'FULL_PROFILE' | 'SNAPSHOT'>('SCORE_ONLY');
+  const [shareScope, setShareScope] = useState<ShareScope>('score');
   const [mintingToken, setMintingToken] = useState(false);
   const [shareLink, setShareLink] = useState('');
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     if (!businessId) {
@@ -42,207 +48,163 @@ function DashboardContent() {
       return;
     }
 
-    const fetchScore = async () => {
-      try {
-        const res = await fetch(`/api/businesses/${businessId}/score`, {
-          headers: {
-            'X-API-Key': 'dev-secret-change-me-in-prod',
-          }
-        });
-        if (!res.ok) {
-          throw new Error('Failed to fetch score or no data exists.');
-        }
-        const data = await res.json();
-        setScoreData(data);
-      } catch (err: any) {
-        setError(err.message);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchScore();
+    fetchScore(businessId)
+      .then(setScoreData)
+      .catch((err: Error) => setError(err.message))
+      .finally(() => setLoading(false));
   }, [businessId, router]);
 
   const handleMintToken = async () => {
     if (!businessId) return;
     setMintingToken(true);
     setShareLink('');
+    setCopied(false);
+
     try {
-      const res = await fetch(`/api/shares?business_id=${businessId}`, {
-        method: 'POST',
-        headers: {
-          'X-API-Key': 'dev-secret-change-me-in-prod',
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          scope: shareScope,
-          ttl_hours: 72
-        })
-      });
-      if (!res.ok) throw new Error('Failed to mint token');
-      const data = await res.json();
-      
-      // Assume frontend is hosted at same origin
-      const link = `${window.location.origin}/api/shares/${data.token}`;
-      setShareLink(link);
-    } catch (err: any) {
-      alert(err.message);
+      const data = await mintShareToken(businessId, SCOPE_MAP[shareScope]);
+      setShareLink(`${window.location.origin}/shares/${data.token}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to mint token');
     } finally {
       setMintingToken(false);
     }
   };
 
+  const handleCopy = async () => {
+    if (!shareLink) return;
+    await navigator.clipboard.writeText(shareLink);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  if (!businessId) return null;
+
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-brand-navy text-white">
-        Loading passport...
-      </div>
+      <AppShell title="Overview" businessId={businessId}>
+        <LoadingState message="Loading your credit passport..." />
+      </AppShell>
     );
   }
 
-  if (error) {
+  if (error && !scoreData) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-brand-navy p-6">
-        <NeuCard className="text-center max-w-md w-full">
-          <p className="text-red-400 mb-6">{error}</p>
-          <NeuButton onClick={() => router.push('/login')}>Go Back</NeuButton>
-        </NeuCard>
-      </div>
+      <AppShell title="Overview" businessId={businessId}>
+        <ErrorState
+          message={error}
+          onRetry={() => router.push('/login')}
+          retryLabel="Back to Login"
+        />
+      </AppShell>
     );
   }
 
   return (
-    <main className="min-h-screen p-6 md:p-12 bg-brand-navy text-white">
-      <div className="max-w-6xl mx-auto space-y-8">
-        
-        {/* Header */}
-        <header className="flex flex-col md:flex-row md:items-center justify-between pb-6 border-b border-gray-700/50">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Business Passport</h1>
-            <p className="text-gray-400 font-mono text-sm mt-1">{businessId}</p>
-          </div>
-          <NeuButton onClick={() => router.push('/login')} variant="secondary" className="mt-4 md:mt-0">
-            Sign Out
-          </NeuButton>
-        </header>
+    <AppShell title="Overview" businessId={businessId}>
+      <div className="mx-auto max-w-5xl space-y-12">
+        {/* Score gauge hero */}
+        <section className="flex justify-center py-6">
+          <NeuGauge
+            score={scoreData?.score ?? 0}
+            confidence={scoreData?.confidence ?? 'HIGH'}
+            modelVersion={scoreData?.model_version}
+          />
+        </section>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Column: Score Gauge & Sharing */}
-          <div className="space-y-8 lg:col-span-1">
-            <NeuCard className="flex flex-col items-center py-10">
-              <NeuGauge score={scoreData?.score || 0} maxScore={1000} label="Credit Score" />
-              
-              <div className="mt-8 text-center space-y-1">
-                <p className="text-gray-400 uppercase tracking-widest text-xs font-semibold">Confidence</p>
-                <p className="text-brand-gold font-medium">{scoreData?.confidence}</p>
-              </div>
-            </NeuCard>
+        {/* Bento panels */}
+        <section className="grid grid-cols-1 gap-8 pb-8 lg:grid-cols-2">
+          <NeuCard className="rounded-3xl">
+            <div className="mb-6 flex items-center justify-between">
+              <h3 className="flex items-center gap-2 text-lg font-semibold text-neu-on-surface">
+                <span className="material-symbols-outlined text-brand-teal">analytics</span>
+                Score Drivers
+              </h3>
+              <span className="rounded-full bg-brand-teal/10 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-teal">
+                SHAP Explainability
+              </span>
+            </div>
+            <ScoreDriverList drivers={scoreData?.drivers ?? []} />
+          </NeuCard>
 
-            <NeuCard className="space-y-6">
-              <div>
-                <h3 className="text-lg font-semibold mb-1">Share Passport</h3>
-                <p className="text-sm text-gray-400">Generate a secure token for lenders.</p>
-              </div>
+          <NeuCard className="flex flex-col rounded-3xl">
+            <div className="mb-2 flex items-center gap-2">
+              <span className="material-symbols-outlined text-brand-gold">ios_share</span>
+              <h3 className="text-lg font-semibold text-neu-on-surface">Share Passport</h3>
+            </div>
+            <p className="mb-5 text-sm text-neu-on-surface-variant">
+              Select what to share with lenders, suppliers, or insurers. Links are
+              revocable and time-limited.
+            </p>
 
-              <div className="space-y-4">
-                <div className="flex flex-col space-y-3 p-4 bg-brand-navy shadow-neu-down rounded-xl">
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="scope" 
-                      checked={shareScope === 'SCORE_ONLY'} 
-                      onChange={() => setShareScope('SCORE_ONLY')}
-                      className="text-brand-teal focus:ring-brand-teal"
-                    />
-                    <span className="text-sm text-gray-200">Score Only (72h)</span>
-                  </label>
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="scope" 
-                      checked={shareScope === 'FULL_PROFILE'} 
-                      onChange={() => setShareScope('FULL_PROFILE')}
-                      className="text-brand-teal focus:ring-brand-teal"
-                    />
-                    <span className="text-sm text-gray-200">Full Profile (72h)</span>
-                  </label>
-                  <label className="flex items-center space-x-3 cursor-pointer">
-                    <input 
-                      type="radio" 
-                      name="scope" 
-                      checked={shareScope === 'SNAPSHOT'} 
-                      onChange={() => setShareScope('SNAPSHOT')}
-                      className="text-brand-teal focus:ring-brand-teal"
-                    />
-                    <span className="text-sm text-gray-200">One-Time Snapshot</span>
-                  </label>
+            <NeuSegmentedControl<ShareScope>
+              options={SCOPE_OPTIONS}
+              value={shareScope}
+              onChange={setShareScope}
+              className="mb-5"
+            />
+
+            <div className="mb-5 flex items-start gap-3 rounded-2xl bg-neu-surface-low/50 p-4 shadow-neu-inset-sm">
+              <span className="material-symbols-outlined text-lg text-neu-on-surface-variant">
+                lock
+              </span>
+              <p className="text-xs leading-relaxed text-neu-on-surface-variant">
+                {shareScope === 'snapshot'
+                  ? 'One-time snapshot — link expires immediately after first view.'
+                  : 'Link expires in 72 hours. Revoke anytime from Share History.'}
+              </p>
+            </div>
+
+            <div className="mt-auto space-y-4">
+              <NeuButton
+                onClick={handleMintToken}
+                disabled={mintingToken}
+                className="w-full"
+                size="lg"
+              >
+                {mintingToken ? (
+                  <>
+                    <span className="material-symbols-outlined animate-spin">sync</span>
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <span className="material-symbols-outlined">link</span>
+                    Generate Share Link
+                  </>
+                )}
+              </NeuButton>
+
+              {shareLink ? (
+                <div className="rounded-2xl bg-neu-surface p-4 shadow-neu-inset-sm">
+                  <p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-neu-on-surface-variant">
+                    Share link
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 break-all text-xs text-brand-teal">{shareLink}</code>
+                    <button
+                      type="button"
+                      onClick={handleCopy}
+                      aria-label="Copy link"
+                      className="shrink-0 rounded-lg p-2 text-neu-on-surface-variant shadow-neu-raised-xs transition-colors hover:text-brand-teal active:shadow-neu-inset-sm"
+                    >
+                      <span className="material-symbols-outlined text-[18px]">
+                        {copied ? 'check' : 'content_copy'}
+                      </span>
+                    </button>
+                  </div>
                 </div>
-
-                <NeuButton onClick={handleMintToken} disabled={mintingToken} className="w-full">
-                  {mintingToken ? 'Minting...' : 'Mint Token'}
-                </NeuButton>
-
-                {shareLink && (
-                  <div className="mt-4 p-3 bg-brand-navy shadow-neu-down rounded-lg overflow-x-auto">
-                    <p className="text-xs text-gray-400 mb-1">Share Link (Public Resolver):</p>
-                    <code className="text-sm text-brand-teal select-all">{shareLink}</code>
-                  </div>
-                )}
-              </div>
-            </NeuCard>
-          </div>
-
-          {/* Right Column: Drivers */}
-          <div className="lg:col-span-2">
-            <NeuCard className="h-full">
-              <h2 className="text-xl font-bold mb-6">Score Drivers</h2>
-              <div className="space-y-4">
-                {scoreData?.drivers?.map((driver, idx) => (
-                  <div key={idx} className="bg-brand-navy shadow-neu-up-sm rounded-xl p-5 flex flex-col md:flex-row md:items-start gap-4">
-                    
-                    {/* Direction Icon / Impact Badge */}
-                    <div className="flex-shrink-0 pt-1">
-                      {driver.direction === 'positive' ? (
-                        <div className="w-12 h-12 rounded-full bg-brand-navy shadow-neu-up flex items-center justify-center text-brand-teal font-bold">
-                          +{driver.impact.toFixed(1)}
-                        </div>
-                      ) : (
-                        <div className="w-12 h-12 rounded-full bg-brand-navy shadow-neu-down flex items-center justify-center text-brand-gold font-bold">
-                          {driver.impact.toFixed(1)}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex-1 space-y-1">
-                      <div className="flex justify-between items-center">
-                        <h4 className="font-semibold text-lg">{driver.label}</h4>
-                        <span className="text-xs font-mono text-gray-500 bg-brand-navy shadow-neu-down px-2 py-1 rounded">
-                          raw: {driver.raw_value.toFixed(2)}
-                        </span>
-                      </div>
-                      <p className="text-gray-300 text-sm leading-relaxed pt-1">
-                        {driver.human_note}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                
-                {(!scoreData?.drivers || scoreData.drivers.length === 0) && (
-                  <p className="text-gray-500 italic text-center py-10">No drivers available.</p>
-                )}
-              </div>
-            </NeuCard>
-          </div>
-        </div>
+              ) : null}
+            </div>
+          </NeuCard>
+        </section>
       </div>
-    </main>
+    </AppShell>
   );
 }
 
 export default function DashboardPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-brand-navy" />}>
+    <Suspense fallback={<div className="min-h-screen bg-neu-surface" />}>
       <DashboardContent />
     </Suspense>
   );

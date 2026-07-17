@@ -209,7 +209,7 @@ class ConsentAuditLog(Base):
     actor = Column(Text, nullable=True)                # business UUID | "resolver" | "system"
     resolved_scope = Column(String, nullable=True)     # scope revealed on RESOLVED events
     requester_ip = Column(Text, nullable=True)         # IP of resolver (RESOLVED events)
-    metadata = Column(JSONB, nullable=True)            # user-agent, extra context
+    action_metadata = Column("metadata", JSONB, nullable=True)            # user-agent, extra context
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
     token = relationship("ConsentToken", back_populates="audit_logs")

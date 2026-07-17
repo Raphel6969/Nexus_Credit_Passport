@@ -1,86 +1,114 @@
 'use client';
-import React, { useEffect, useState } from 'react';
+
+import React, { useEffect, useId, useState } from 'react';
 
 interface NeuGaugeProps {
   score: number;
   maxScore?: number;
-  label?: string;
+  confidence?: string;
+  modelVersion?: string;
   size?: number;
-  strokeWidth?: number;
 }
 
 export function NeuGauge({
   score,
   maxScore = 1000,
-  label = 'Score',
-  size = 200,
-  strokeWidth = 16,
+  confidence = 'HIGH',
+  modelVersion,
+  size = 320,
 }: NeuGaugeProps) {
+  const gradientId = useId();
   const [animatedScore, setAnimatedScore] = useState(0);
 
   useEffect(() => {
-    // Simple animation for the score
-    const timeout = setTimeout(() => {
-      setAnimatedScore(score);
-    }, 100);
+    const timeout = setTimeout(() => setAnimatedScore(score), 150);
     return () => clearTimeout(timeout);
   }, [score]);
 
-  const radius = (size - strokeWidth) / 2;
-  const circumference = radius * 2 * Math.PI;
-  const percentage = Math.max(0, Math.min(animatedScore / maxScore, 1));
-  const strokeDashoffset = circumference - percentage * circumference;
+  const strokeWidth = 22;
+  const radius = (size - strokeWidth) / 2 - 8;
+  const cx = size / 2;
+  const cy = size / 2;
+  const circumference = 2 * Math.PI * radius;
+  const progress = Math.max(0, Math.min(animatedScore / maxScore, 1));
+  const strokeDashoffset = circumference - progress * circumference;
+
+  const innerSize = size * 0.62;
 
   return (
-    <div className="relative flex flex-col items-center justify-center" style={{ width: size, height: size }}>
-      {/* Neumorphic base ring */}
-      <div 
-        className="absolute rounded-full bg-brand-navy shadow-neu-down"
+    <div className="flex flex-col items-center animate-fade-in">
+      <div
+        className="relative flex items-center justify-center"
         style={{ width: size, height: size }}
-      />
-      
-      {/* Neumorphic inner raised center */}
-      <div 
-        className="absolute rounded-full bg-brand-navy shadow-neu-up flex flex-col items-center justify-center"
-        style={{ width: size - strokeWidth * 2.5, height: size - strokeWidth * 2.5 }}
       >
-        <span className="text-4xl font-bold text-brand-teal drop-shadow-[0_0_8px_rgba(15,158,143,0.8)]">
-          {animatedScore}
-        </span>
-        <span className="text-sm font-medium text-gray-400 mt-1 uppercase tracking-wider">
-          {label}
-        </span>
+        {/* Outer track — inset ring */}
+        <div
+          className="absolute rounded-full bg-neu-surface shadow-neu-inset"
+          style={{ width: size, height: size }}
+        />
+
+        <svg
+          className="absolute -rotate-90"
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          aria-hidden="true"
+        >
+          <defs>
+            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#0F9E8F" />
+              <stop offset="100%" stopColor="#D9A441" />
+            </linearGradient>
+          </defs>
+          <circle
+            cx={cx}
+            cy={cy}
+            r={radius}
+            fill="none"
+            stroke="#DDE2E8"
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+          />
+          <circle
+            cx={cx}
+            cy={cy}
+            r={radius}
+            fill="none"
+            stroke={`url(#${gradientId})`}
+            strokeWidth={strokeWidth}
+            strokeLinecap="round"
+            strokeDasharray={circumference}
+            strokeDashoffset={strokeDashoffset}
+            className="transition-all duration-[1.2s] ease-out drop-shadow-sm"
+          />
+        </svg>
+
+        {/* Inner raised disc */}
+        <div
+          className="absolute z-10 flex flex-col items-center justify-center rounded-full bg-neu-surface shadow-neu-raised"
+          style={{ width: innerSize, height: innerSize }}
+        >
+          <span className="text-5xl font-bold tracking-tight text-brand-teal tabular-nums">
+            {Math.round(animatedScore)}
+          </span>
+          <span className="mt-1 text-[11px] font-bold uppercase tracking-[0.2em] text-neu-on-surface-variant">
+            of {maxScore}
+          </span>
+          <span className="mt-3 rounded-full bg-brand-teal/10 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-brand-teal">
+            {confidence} confidence
+          </span>
+        </div>
       </div>
 
-      {/* SVG progress ring */}
-      <svg
-        className="absolute transform -rotate-90"
-        width={size}
-        height={size}
-        viewBox={`0 0 ${size} ${size}`}
-      >
-        {/* Glow filter */}
-        <defs>
-          <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="4" result="blur" />
-            <feComposite in="SourceGraphic" in2="blur" operator="over" />
-          </filter>
-        </defs>
-
-        <circle
-          cx={size / 2}
-          cy={size / 2}
-          r={radius}
-          fill="none"
-          stroke="#0F9E8F" /* brand-teal */
-          strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          strokeDashoffset={strokeDashoffset}
-          filter="url(#glow)"
-          style={{ transition: 'stroke-dashoffset 1.5s ease-out' }}
-        />
-      </svg>
+      <div className="mt-8 text-center animate-slide-up">
+        <h2 className="text-2xl font-bold text-neu-on-surface">Credit Passport Score</h2>
+        {modelVersion && (
+          <p className="mt-1 text-sm text-neu-on-surface-variant">
+            Model{' '}
+            <span className="font-mono font-medium text-brand-teal">{modelVersion}</span>
+          </p>
+        )}
+      </div>
     </div>
   );
 }
