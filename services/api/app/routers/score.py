@@ -89,7 +89,7 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
                 INSERT INTO score_snapshots
                     (id, business_id, score, confidence, model_version, drivers, computed_at, created_at)
                 VALUES
-                    (:id, :business_id, :score, :confidence, :model_version, :drivers::jsonb, :computed_at, :created_at)
+                    (CAST(:id AS UUID), CAST(:business_id AS UUID), :score, :confidence, :model_version, CAST(:drivers AS JSONB), :computed_at, :created_at)
             """),
             {
                 "id": str(uuid.uuid4()),

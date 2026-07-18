@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
 
   try {
     const body = await request.json();
-    const res = await fetch(`${apiUrl}/v1/businesses/${businessId}/shares`, {
+    const res = await fetch(`${apiUrl}/v1/shares?business_id=${encodeURIComponent(businessId)}`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

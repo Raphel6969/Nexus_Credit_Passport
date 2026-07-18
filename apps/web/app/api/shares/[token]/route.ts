@@ -43,7 +43,7 @@ export async function DELETE(
 
   try {
     const res = await fetch(
-      `${apiUrl}/v1/businesses/${businessId}/shares/${token}`,
+      `${apiUrl}/v1/shares/${token}?business_id=${encodeURIComponent(businessId)}`,
       {
         method: 'DELETE',
         headers: { 'X-API-Key': apiKey },

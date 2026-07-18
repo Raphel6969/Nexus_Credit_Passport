@@ -15,7 +15,7 @@ router = APIRouter()
 
 class MintTokenRequest(BaseModel):
     scope: str
-    ttl_hours: int = 72
+    ttl_hours: Optional[int] = None  # None = no auto-expiry (active until revoked)
 
 @router.post("/shares", dependencies=[Depends(verify_api_key)])
 async def create_share_token(

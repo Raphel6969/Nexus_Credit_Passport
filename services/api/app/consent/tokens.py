@@ -13,25 +13,38 @@ async def mint_token(
     db: AsyncSession,
     business_id: str,
     scope: str,
-    ttl_hours: int,
+    ttl_hours: Optional[int],
 ) -> ConsentToken:
     """
     Creates a cryptographically random share token, inserts row, logs MINTED audit event.
     For SNAPSHOT scope, we also grab the latest score data and bake it into the token.
+    ttl_hours=None means the token never auto-expires (active until revoked).
     """
     if scope not in ["FULL_PROFILE", "SCORE_ONLY", "SNAPSHOT"]:
         raise ValueError("Invalid scope")
 
     token_str = secrets.token_urlsafe(32)
-    expires_at = datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+    expires_at = (
+        datetime.now(timezone.utc) + timedelta(hours=ttl_hours)
+        if ttl_hours is not None
+        else None
+    )
     
     snapshot_data = None
     if scope == "SNAPSHOT":
-        # Fetch the latest score snapshot to bake into the token
+        # Fetch the latest score snapshot using raw SQL (same pattern as score.py)
+        # to avoid UUID/string type-mismatch that silently returns no rows with ORM.
         result = await db.execute(
-            select(ScoreSnapshot).where(ScoreSnapshot.business_id == business_id).order_by(ScoreSnapshot.computed_at.desc()).limit(1)
+            text("""
+                SELECT score, confidence, model_version, drivers, computed_at
+                FROM score_snapshots
+                WHERE business_id = CAST(:business_id AS UUID)
+                ORDER BY computed_at DESC
+                LIMIT 1
+            """),
+            {"business_id": business_id},
         )
-        latest_score = result.scalar_one_or_none()
+        latest_score = result.fetchone()
         if not latest_score:
             raise HTTPException(status_code=400, detail="Cannot mint SNAPSHOT token: no score found for this business.")
         

@@ -59,7 +59,7 @@ export async function fetchScore(businessId: string): Promise<ScoreData> {
 export async function mintShareToken(
   businessId: string,
   scope: 'SCORE_ONLY' | 'FULL_PROFILE' | 'SNAPSHOT',
-  ttlHours = 72
+  ttlHours: number | null = null
 ) {
   return apiFetch(`/api/shares?business_id=${encodeURIComponent(businessId)}`, {
     method: 'POST',

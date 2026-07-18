@@ -23,24 +23,26 @@ const SCOPE_ICONS: Record<string, string> = {
   SNAPSHOT: 'camera_alt',
 };
 
-function formatDate(dateStr: string) {
+function formatDate(dateStr: string | null) {
+  if (!dateStr) return 'Never';
   try {
-    return new Date(dateStr).toLocaleString('en-IN', {
+    return new Date(dateStr).toLocaleDateString('en-IN', {
       dateStyle: 'medium',
-      timeStyle: 'short',
     });
   } catch {
     return dateStr;
   }
 }
 
-function isExpired(expiresAt: string) {
+function isExpired(expiresAt: string | null) {
+  if (!expiresAt) return false; // null = never expires
   return new Date(expiresAt) < new Date();
 }
 
 function getStatus(share: ShareToken): 'active' | 'expired' | 'revoked' {
   if (share.status === 'REVOKED') return 'revoked';
-  if (share.status === 'EXPIRED' || isExpired(share.expires_at)) return 'expired';
+  if (share.status === 'EXPIRED') return 'expired';
+  if (share.expires_at && isExpired(share.expires_at)) return 'expired';
   return 'active';
 }
 
@@ -121,7 +123,7 @@ function ShareHistoryContent() {
           </div>
           <NeuButton
             variant="ghost"
-            onClick={() => router.push(`/dashboard?businessId=${encodeURIComponent(businessId)}`)}
+            onClick={() => router.push(`/score-board?businessId=${encodeURIComponent(businessId)}`)}
           >
             <span className="material-symbols-outlined text-[18px]">add</span>
             Mint New Token
@@ -160,7 +162,7 @@ function ShareHistoryContent() {
             </span>
             <p className="text-sm text-neu-on-surface-variant">
               {filter === 'ALL'
-                ? 'No tokens minted yet. Go to Dashboard to create your first share link.'
+                ? 'No tokens minted yet. Go to Score Board to create your first share link.'
                 : `No ${filter.toLowerCase()} tokens found.`}
             </p>
           </NeuCard>
@@ -191,7 +193,7 @@ function ShareHistoryContent() {
 
                     <div className="flex flex-wrap gap-x-6 gap-y-1 font-mono text-xs text-neu-on-surface-variant">
                       <span>Created: {formatDate(share.created_at)}</span>
-                      <span>Expires: {formatDate(share.expires_at)}</span>
+                      <span>Expires: {share.expires_at ? formatDate(share.expires_at) : 'Never (revoke to deactivate)'}</span>
                     </div>
 
                     <div className="flex items-center gap-2 rounded-xl bg-neu-surface px-3 py-2 shadow-neu-inset-sm">

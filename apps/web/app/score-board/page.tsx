@@ -42,6 +42,10 @@ function DashboardContent() {
   const [shareLink, setShareLink] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // Expiry: user picks a datetime or checks "never expires"
+  const [neverExpires, setNeverExpires] = useState(false);
+  const [expiryDatetime, setExpiryDatetime] = useState('');
+
   useEffect(() => {
     if (!businessId) {
       router.push('/login');
@@ -59,9 +63,24 @@ function DashboardContent() {
     setMintingToken(true);
     setShareLink('');
     setCopied(false);
+    setError('');
 
     try {
-      const data = await mintShareToken(businessId, SCOPE_MAP[shareScope]);
+      let ttlHours: number | null = null;
+      if (!neverExpires && expiryDatetime) {
+        // Parse date (e.g. YYYY-MM-DD) and set hours to end of day (23:59:59) so it expires then
+        const chosenDate = new Date(expiryDatetime + 'T23:59:59');
+        const diffMs = chosenDate.getTime() - Date.now();
+        const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+        if (diffHours <= 0) {
+          setError('Expiry date must be in the future.');
+          setMintingToken(false);
+          return;
+        }
+        ttlHours = diffHours;
+      }
+      // neverExpires=true OR no datetime set → ttlHours stays null → backend stores expires_at=null
+      const data = await mintShareToken(businessId, SCOPE_MAP[shareScope], ttlHours);
       setShareLink(`${window.location.origin}/shares/${data.token}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to mint token');
@@ -143,6 +162,45 @@ function DashboardContent() {
               className="mb-5"
             />
 
+            {/* ── Link Expiry Picker ── */}
+            {shareScope !== 'snapshot' && (
+              <div className="mb-5">
+                <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-neu-on-surface-variant">
+                  Link Expiry
+                </p>
+
+                {/* Never-expires toggle */}
+                <label className="mb-3 flex cursor-pointer items-center gap-2.5">
+                  <span
+                    onClick={() => setNeverExpires((v) => !v)}
+                    className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full transition-colors ${
+                      neverExpires ? 'bg-brand-teal' : 'bg-neu-surface-low shadow-neu-inset-sm'
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${
+                        neverExpires ? 'translate-x-4' : 'translate-x-0'
+                      }`}
+                    />
+                  </span>
+                  <span className="text-xs text-neu-on-surface-variant">
+                    Never expires <span className="text-neu-on-surface-variant/60">(revoke manually from Share History)</span>
+                  </span>
+                </label>
+
+                {/* Date picker — shown only when not neverExpires */}
+                {!neverExpires && (
+                  <input
+                    type="date"
+                    value={expiryDatetime}
+                    min={new Date().toISOString().slice(0, 10)}
+                    onChange={(e) => setExpiryDatetime(e.target.value)}
+                    className="w-full rounded-xl bg-neu-surface-low px-3 py-2 text-xs text-neu-on-surface shadow-neu-inset-sm outline-none ring-1 ring-transparent focus:ring-brand-teal [color-scheme:dark]"
+                  />
+                )}
+              </div>
+            )}
+
             <div className="mb-5 flex items-start gap-3 rounded-2xl bg-neu-surface-low/50 p-4 shadow-neu-inset-sm">
               <span className="material-symbols-outlined text-lg text-neu-on-surface-variant">
                 lock
@@ -150,7 +208,11 @@ function DashboardContent() {
               <p className="text-xs leading-relaxed text-neu-on-surface-variant">
                 {shareScope === 'snapshot'
                   ? 'One-time snapshot — link expires immediately after first view.'
-                  : 'Link expires in 72 hours. Revoke anytime from Share History.'}
+                  : neverExpires
+                  ? 'Link never auto-expires — revoke it anytime from Share History.'
+                  : expiryDatetime
+                  ? `Link expires on ${new Date(expiryDatetime).toLocaleDateString(undefined, { dateStyle: 'medium' })}. Revoke anytime from Share History.`
+                  : 'Pick an expiry date above, or enable "Never expires".'}
               </p>
             </div>
 

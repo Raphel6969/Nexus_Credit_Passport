@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, Suspense } from 'react';
+import React, { useState, Suspense, useEffect } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { AppShell } from '../../components/layout/AppShell';
 import { NeuCard } from '../../components/ui/NeuCard';
 import { NeuButton } from '../../components/ui/NeuButton';
 import { NeuToggle } from '../../components/ui/NeuToggle';
+import { fetchShareHistory, type ShareToken } from '../../lib/api';
 
 interface ConsentPref {
   id: string;
@@ -68,6 +69,33 @@ function SettingsContent() {
   const [prefs, setPrefs] = useState<ConsentPref[]>(DEFAULT_PREFS);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [activeTokensCount, setActiveTokensCount] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!businessId) return;
+
+    const isExpired = (expiresAt: string | null) => {
+      if (!expiresAt) return false;
+      return new Date(expiresAt) < new Date();
+    };
+    
+    const getStatus = (share: ShareToken): 'active' | 'expired' | 'revoked' => {
+      if (share.status === 'REVOKED') return 'revoked';
+      if (share.status === 'EXPIRED') return 'expired';
+      if (share.expires_at && isExpired(share.expires_at)) return 'expired';
+      return 'active';
+    };
+
+    fetchShareHistory(businessId)
+      .then((tokens) => {
+        const activeCount = tokens.filter((t) => getStatus(t) === 'active').length;
+        setActiveTokensCount(activeCount);
+      })
+      .catch((err) => {
+        console.error('Failed to load active tokens:', err);
+        setActiveTokensCount(0);
+      });
+  }, [businessId]);
 
   if (!businessId) {
     router.push('/login');
@@ -134,7 +162,11 @@ function SettingsContent() {
                 { label: 'Business ID', value: businessId, icon: 'badge' },
                 { label: 'Consent Status', value: 'Active', icon: 'verified_user' },
                 { label: 'Data Freshness', value: 'Last synced: Today', icon: 'sync' },
-                { label: 'Score Model', value: 'XGBoost + SHAP', icon: 'model_training' },
+                {
+                  label: 'Active Tokens',
+                  value: activeTokensCount !== null ? String(activeTokensCount) : 'Loading...',
+                  icon: 'vpn_key',
+                },
               ].map(({ label, value, icon }) => (
                 <div
                   key={label}
