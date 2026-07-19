@@ -98,12 +98,13 @@ export async function resolveShareToken(token: string) {
   });
 }
 
-export async function triggerIngest(businessId: string) {
+export async function triggerIngest(businessId: string, source = 'aa') {
   const res = await fetch('/api/ingest', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       businessId,
+      source,
       consentId: `consent-${Date.now()}`,
       accountId: `account-${Date.now()}`,
     }),

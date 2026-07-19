@@ -7,6 +7,9 @@ import { NeuCard } from '../../components/ui/NeuCard';
 import { NeuInput } from '../../components/ui/NeuInput';
 import { triggerIngest } from '../../lib/api';
 
+const DEMO_BUSINESS_ID =
+  process.env.NEXT_PUBLIC_BUSINESS_ID || '00000000-0000-0000-0000-000000000001';
+
 const securityBadges = [
   { icon: 'security', label: '256-bit AES' },
   { icon: 'account_balance', label: 'RBI AA Framework' },
@@ -15,14 +18,12 @@ const securityBadges = [
 
 export default function LoginPage() {
   const router = useRouter();
-  const [businessId, setBusinessId] = useState('');
+  const [businessId, setBusinessId] = useState(DEMO_BUSINESS_ID);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault();
-
-    const trimmedBusinessId = businessId.trim();
+  const handleSubmit = async (id: string) => {
+    const trimmedBusinessId = id.trim();
     if (!trimmedBusinessId) {
       setError('Please enter a business ID to continue.');
       return;
@@ -43,6 +44,11 @@ export default function LoginPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleFormSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
+    handleSubmit(businessId);
   };
 
   return (
@@ -69,7 +75,7 @@ export default function LoginPage() {
             </p>
           </header>
 
-          <form onSubmit={handleSubmit} className="flex w-full flex-col gap-6">
+          <form onSubmit={handleFormSubmit} className="flex w-full flex-col gap-6">
             <NeuInput
               id="businessId"
               label="Business ID"
@@ -81,7 +87,7 @@ export default function LoginPage() {
                 setBusinessId(event.target.value);
                 if (error) setError(null);
               }}
-              placeholder="Enter your GSTIN, PAN, or demo UUID"
+              placeholder="Enter your GSTIN, PAN, or UUID"
             />
 
             {error ? (
@@ -92,7 +98,7 @@ export default function LoginPage() {
 
             <NeuButton
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !businessId.trim()}
               size="lg"
               className="w-full"
             >

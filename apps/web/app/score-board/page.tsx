@@ -107,13 +107,35 @@ function DashboardContent() {
   }
 
   if (error && !scoreData) {
+    const isNoData = error.includes('NO_DATA') || error.includes('No transaction data');
     return (
       <AppShell title="Overview" businessId={businessId}>
-        <ErrorState
-          message={error}
-          onRetry={() => router.push('/login')}
-          retryLabel="Back to Login"
-        />
+        <div className="mx-auto flex max-w-md flex-col items-center rounded-3xl bg-neu-surface p-10 text-center shadow-neu-raised">
+          <span className="material-symbols-outlined mb-4 block text-5xl text-neu-error">
+            {isNoData ? 'search_off' : 'error'}
+          </span>
+          <h2 className="mb-2 text-lg font-bold text-neu-on-surface">
+            {isNoData ? 'No Data Found for This Business' : 'Something went wrong'}
+          </h2>
+          <p className="mb-2 text-sm text-neu-on-surface-variant">
+            {isNoData
+              ? `Business ID "${businessId?.slice(0, 8)}..." has no financial data linked yet. This usually means the ID is not in the demo database.`
+              : error}
+          </p>
+          {isNoData && (
+            <p className="mb-6 rounded-xl bg-brand-teal/5 px-4 py-3 text-xs text-brand-teal">
+              💡 Use the pre-seeded demo account: <br />
+              <code className="font-mono font-bold">00000000-0000-0000-0000-000000000001</code>
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push('/login')}
+            className="rounded-xl bg-neu-surface px-6 py-3 text-sm font-semibold text-brand-teal shadow-neu-raised active:shadow-neu-inset"
+          >
+            Back to Login
+          </button>
+        </div>
       </AppShell>
     );
   }
