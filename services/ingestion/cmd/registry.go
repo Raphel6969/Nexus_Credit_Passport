@@ -6,6 +6,7 @@ package main
 import (
 	"github.com/nexus-credit-passport/ingestion/internal/connectors"
 	"github.com/nexus-credit-passport/ingestion/internal/connectors/gstn"
+	"github.com/nexus-credit-passport/ingestion/internal/connectors/manualupi"
 	"github.com/nexus-credit-passport/ingestion/internal/connectors/razorpay"
 	"github.com/nexus-credit-passport/ingestion/internal/connectors/zoho"
 )
@@ -20,4 +21,8 @@ func newRazorpayConnector() connectors.SourceConnector {
 
 func newZohoConnector() connectors.SourceConnector {
 	return zoho.NewConnector()
+}
+
+func newManualUPIConnector() connectors.SourceConnector {
+	return manualupi.NewConnector()
 }

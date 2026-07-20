@@ -151,6 +151,56 @@ function DashboardContent() {
             modelVersion={scoreData?.model_version}
           />
         </section>
+        
+        {/* Scoring Methodology */}
+        <section className="pb-2">
+          <NeuCard className="rounded-3xl border border-brand-teal/20 bg-gradient-to-br from-neu-surface via-neu-surface to-brand-teal/5">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-brand-teal">calculate</span>
+              <h3 className="text-lg font-semibold text-neu-on-surface">How We Calculate Your Score</h3>
+            </div>
+            
+            <div className="space-y-4 text-sm text-neu-on-surface-variant leading-relaxed">
+              <p>
+                Unlike traditional banks that rely on rigid rules and historical credit files (like strict debt-to-income ratios), 
+                our engine uses a <strong>dynamic ML model</strong> that analyzes your real-time cash flow and transaction behavior.
+              </p>
+              
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 mt-4">
+                <div className="rounded-2xl bg-neu-surface-low/50 p-4 shadow-neu-inset-sm">
+                  <h4 className="flex items-center gap-2 font-bold text-neu-on-surface mb-2">
+                    <span className="material-symbols-outlined text-[16px] text-brand-teal">account_balance</span>
+                    The Bank Way
+                  </h4>
+                  <ul className="list-disc pl-5 space-y-1 text-xs">
+                    <li>Requires years of credit history</li>
+                    <li>Slow, manual underwriting</li>
+                    <li>Heavily penalizes lack of collateral</li>
+                    <li>Static score updated monthly</li>
+                  </ul>
+                </div>
+                <div className="rounded-2xl bg-neu-surface-low/50 p-4 shadow-neu-inset-sm">
+                  <h4 className="flex items-center gap-2 font-bold text-neu-on-surface mb-2">
+                    <span className="material-symbols-outlined text-[16px] text-brand-gold">bolt</span>
+                    Our ML Approach
+                  </h4>
+                  <ul className="list-disc pl-5 space-y-1 text-xs">
+                    <li>Analyzes cash-flow consistency &amp; velocity</li>
+                    <li>Evaluates fixed vs variable cost ratios</li>
+                    <li>Rewards diversified revenue streams</li>
+                    <li>Real-time score updates based on recent activity</li>
+                  </ul>
+                </div>
+              </div>
+              
+              <p className="mt-4">
+                <strong>The Formula:</strong> We extract <em>SHAP (SHapley Additive exPlanations) values</em> from our model to determine exactly which 
+                financial behaviors positively or negatively impact your score. Our AI layer then analyzes these drivers to provide 
+                actionable advice tailored to your business.
+              </p>
+            </div>
+          </NeuCard>
+        </section>
 
         {/* Bento panels */}
         <section className="grid grid-cols-1 gap-8 pb-8 lg:grid-cols-2">
@@ -164,6 +214,17 @@ function DashboardContent() {
                 SHAP Explainability
               </span>
             </div>
+            
+            {scoreData?.note && (
+              <div className="mb-6 flex items-start gap-3 rounded-2xl bg-brand-gold/10 p-4 shadow-neu-inset-sm">
+                <span className="material-symbols-outlined text-lg text-brand-gold">auto_awesome</span>
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-brand-gold">AI Insight</p>
+                  <p className="text-sm font-medium text-neu-on-surface leading-relaxed mt-1">{scoreData.note}</p>
+                </div>
+              </div>
+            )}
+            
             <ScoreDriverList drivers={scoreData?.drivers ?? []} />
           </NeuCard>
 

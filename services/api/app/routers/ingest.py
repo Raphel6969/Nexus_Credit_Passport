@@ -1,6 +1,8 @@
 """
 Ingest router — proxies ingest requests to the Go ingestion service.
 """
+import uuid
+
 import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
@@ -17,6 +19,15 @@ class IngestAARequest(BaseModel):
 
 class GenericIngestRequest(BaseModel):
     accountId: str
+
+
+class ManualUPIIngestRequest(BaseModel):
+    amountPaise: int
+    payerHandle: str | None = None
+    payerName: str | None = None
+    upiRef: str | None = None
+    paidAt: str | None = None
+    accountId: str | None = None
 
 
 @router.post("/businesses/{business_id}/ingest/aa", status_code=202)
@@ -54,6 +65,21 @@ async def ingest_zoho(business_id: str, req: GenericIngestRequest):
     return await proxy_to_ingestion("/v1/ingest/zoho", {
         "accountId": req.accountId,
         "businessId": business_id,
+    })
+
+
+@router.post("/businesses/{business_id}/ingest/manual-upi", status_code=202)
+async def ingest_manual_upi(business_id: str, req: ManualUPIIngestRequest):
+    # Keep one stable account per business for manual UPI ingestion.
+    account_id = req.accountId or str(uuid.uuid5(uuid.NAMESPACE_DNS, f"{business_id}:manual-upi"))
+    return await proxy_to_ingestion("/v1/ingest/manual-upi", {
+        "accountId": account_id,
+        "businessId": business_id,
+        "amountPaise": req.amountPaise,
+        "payerHandle": req.payerHandle or "",
+        "payerName": req.payerName or "",
+        "upiRef": req.upiRef or "",
+        "paidAt": req.paidAt or "",
     })
 
 

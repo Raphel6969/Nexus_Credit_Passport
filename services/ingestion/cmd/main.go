@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -73,6 +74,34 @@ func main() {
 
 	// POST /v1/ingest/razorpay — Razorpay payments/settlements
 	r.POST("/v1/ingest/razorpay", makeGenericIngestHandler(orch, "razorpay"))
+
+	// POST /v1/ingest/manual-upi — Manual capture of real UPI payment details
+	r.POST("/v1/ingest/manual-upi", makeIngestHandler(orch, func() connectors.SourceConnector {
+		return newManualUPIConnector()
+	}, func(c *gin.Context, req *connectors.SyncRequest) {
+		var body struct {
+			BusinessID  string `json:"businessId" binding:"required"`
+			AccountID   string `json:"accountId" binding:"required"`
+			AmountPaise int64  `json:"amountPaise" binding:"required,min=1"`
+			PayerHandle string `json:"payerHandle"`
+			PayerName   string `json:"payerName"`
+			UPIRef      string `json:"upiRef"`
+			PaidAt      string `json:"paidAt"`
+		}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+			return
+		}
+		req.BusinessID = body.BusinessID
+		req.AccountID = body.AccountID
+		req.AuthConfig = map[string]string{
+			"amountPaise": fmt.Sprintf("%d", body.AmountPaise),
+			"payerHandle": body.PayerHandle,
+			"payerName":   body.PayerName,
+			"upiRef":      body.UPIRef,
+			"paidAt":      body.PaidAt,
+		}
+	}))
 
 	// POST /v1/ingest/zoho — Zoho Books invoices/bills
 	r.POST("/v1/ingest/zoho", makeGenericIngestHandler(orch, "zoho"))

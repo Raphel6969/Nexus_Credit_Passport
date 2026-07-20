@@ -194,16 +194,20 @@ interface StatCardProps {
 
 function StatCard({ label, value, icon, color, gradient, subtitle }: StatCardProps) {
   return (
-    <NeuCard className="relative overflow-hidden rounded-3xl">
+    <NeuCard className="relative overflow-hidden rounded-3xl border border-white/40">
       {/* Decorative glow blob */}
       <div
         className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full opacity-10 blur-2xl"
         style={{ background: gradient }}
       />
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-white/30 via-transparent to-transparent" />
       <div className="relative z-10 flex flex-col gap-3">
         <div className="flex items-center gap-2">
-          <span className="material-symbols-outlined text-[22px]" style={{ color }}>
-            {icon}
+          <span
+            className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-neu-surface-low/70 shadow-neu-inset-sm"
+            style={{ color }}
+          >
+            <span className="material-symbols-outlined text-[18px]">{icon}</span>
           </span>
           <p className="text-[11px] font-bold uppercase tracking-wider text-neu-on-surface-variant">
             {label}
@@ -367,7 +371,7 @@ function DashboardContent() {
     );
   }
 
-  const { summary, monthly, modes, recent_transactions } = data;
+  const { summary, monthly, modes, recent_transactions, monthly_kpis, trend_insights, budget_guidance } = data;
   const savingsRate =
     summary.total_earned > 0
       ? ((summary.total_saved / summary.total_earned) * 100).toFixed(1)
@@ -384,9 +388,49 @@ function DashboardContent() {
       ? (((lastTwo[1].spent - lastTwo[0].spent) / lastTwo[0].spent) * 100).toFixed(1)
       : null;
 
+  const fixedCostHealth =
+    trend_insights.fixed_cost_ratio_pct <= budget_guidance.fixed_cost_ratio_threshold_pct
+      ? 'Healthy'
+      : 'Needs Attention';
+
   return (
     <AppShell title="Dashboard" businessId={businessId}>
-      <div className="mx-auto max-w-5xl space-y-10">
+      <div className="mx-auto max-w-6xl space-y-10">
+        {/* ── Hero banner ─────────────────────────────────────────────────── */}
+        <section className="relative overflow-hidden rounded-3xl border border-white/50 bg-neu-surface px-6 py-6 shadow-neu-raised sm:px-8">
+          <div className="pointer-events-none absolute -right-20 -top-20 h-56 w-56 rounded-full bg-brand-teal/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 left-10 h-52 w-52 rounded-full bg-brand-gold/10 blur-3xl" />
+          <div className="relative z-10 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <p className="mb-2 inline-flex items-center gap-1.5 rounded-full bg-neu-surface-low px-3 py-1 text-[11px] font-bold uppercase tracking-wider text-brand-teal shadow-neu-inset-sm">
+                <span className="material-symbols-outlined text-[14px]">insights</span>
+                Merchant Overview
+              </p>
+              <h2 className="text-2xl font-extrabold tracking-tight text-brand-navy sm:text-3xl">
+                Earnings and cash-flow control, at a glance
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-neu-on-surface-variant">
+                Monitor earnings trends, spending concentration, and hybrid budget targets from one place.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-neu-surface-low/60 px-4 py-3 shadow-neu-inset-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Avg Saved / Month</p>
+                <p className="mt-1 text-sm font-bold text-brand-teal">{formatRupees(trend_insights.avg_monthly_saved)}</p>
+              </div>
+              <div className="rounded-2xl bg-neu-surface-low/60 px-4 py-3 shadow-neu-inset-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Fixed-Cost Ratio</p>
+                <p className="mt-1 text-sm font-bold text-neu-on-surface">{trend_insights.fixed_cost_ratio_pct.toFixed(1)}%</p>
+              </div>
+              <div className="rounded-2xl bg-neu-surface-low/60 px-4 py-3 shadow-neu-inset-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Top Spend Mode</p>
+                <p className="mt-1 text-sm font-bold text-neu-on-surface">
+                  {trend_insights.top_spend_mode ?? 'N/A'}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
 
         {/* ── Hero: 3 stat cards ─────────────────────────────────────────── */}
         <section className="grid grid-cols-1 gap-6 sm:grid-cols-3">
@@ -414,6 +458,36 @@ function DashboardContent() {
             gradient="linear-gradient(135deg, #a78bfa, #7c3aed)"
             subtitle={`Savings rate: ${savingsRate}%`}
           />
+        </section>
+
+        {/* ── Earnings insights ─────────────────────────────────────────────── */}
+        <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+          <NeuCard className="rounded-3xl">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Avg Monthly Earned</p>
+            <p className="mt-2 text-2xl font-extrabold text-brand-teal">{formatRupees(trend_insights.avg_monthly_earned)}</p>
+            <p className="mt-1 text-xs text-neu-on-surface-variant">
+              Avg Monthly Spent: {formatRupees(trend_insights.avg_monthly_spent)}
+            </p>
+          </NeuCard>
+          <NeuCard className="rounded-3xl">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Best / Tough Month</p>
+            <p className="mt-2 text-sm font-semibold text-neu-on-surface">
+              {trend_insights.best_month ? shortMonth(trend_insights.best_month) : 'N/A'} /{' '}
+              {trend_insights.worst_month ? shortMonth(trend_insights.worst_month) : 'N/A'}
+            </p>
+            <p className="mt-1 text-xs text-neu-on-surface-variant">
+              Based on monthly net savings.
+            </p>
+          </NeuCard>
+          <NeuCard className="rounded-3xl">
+            <p className="text-[11px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Spend Concentration</p>
+            <p className="mt-2 text-sm font-semibold text-neu-on-surface">
+              {trend_insights.top_spend_mode ?? 'N/A'} · {trend_insights.top_spend_mode_share_pct.toFixed(1)}%
+            </p>
+            <p className="mt-1 text-xs text-neu-on-surface-variant">
+              Your biggest spend channel.
+            </p>
+          </NeuCard>
         </section>
 
         {/* ── Monthly trend chart ───────────────────────────────────────── */}
@@ -486,6 +560,84 @@ function DashboardContent() {
             <TransactionTable transactions={recent_transactions} />
           </NeuCard>
 
+        </section>
+
+        {/* ── Hybrid budgeting guidance ─────────────────────────────────────── */}
+        <section className="grid grid-cols-1 gap-8 pb-8 lg:grid-cols-2">
+          <NeuCard className="rounded-3xl">
+            <div className="mb-5 flex items-center gap-2">
+              <span className="material-symbols-outlined text-brand-teal">savings</span>
+              <h3 className="text-lg font-semibold text-neu-on-surface">Budget Targets</h3>
+            </div>
+            <div className="space-y-4">
+              <div className="rounded-2xl bg-neu-surface-low/50 p-4 shadow-neu-inset-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Savings Floor</p>
+                <p className="mt-1 text-xl font-extrabold text-brand-teal">{formatRupees(budget_guidance.savings_floor_target)}</p>
+                <p className="mt-1 text-xs text-neu-on-surface-variant">Recommended minimum monthly savings target.</p>
+              </div>
+              <div className="rounded-2xl bg-neu-surface-low/50 p-4 shadow-neu-inset-sm">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-neu-on-surface-variant">Fixed-Cost Ratio</p>
+                <p className="mt-1 text-xl font-extrabold text-neu-on-surface">
+                  {trend_insights.fixed_cost_ratio_pct.toFixed(1)}%
+                </p>
+                <p className="mt-1 text-xs text-neu-on-surface-variant">
+                  Threshold: {budget_guidance.fixed_cost_ratio_threshold_pct.toFixed(0)}% · {fixedCostHealth}
+                </p>
+              </div>
+            </div>
+          </NeuCard>
+
+          <NeuCard className="rounded-3xl">
+            <div className="mb-5 flex items-center gap-2">
+              <span className="material-symbols-outlined text-brand-gold">tune</span>
+              <h3 className="text-lg font-semibold text-neu-on-surface">Variable Spend Caps</h3>
+            </div>
+            {budget_guidance.variable_caps.length === 0 ? (
+              <p className="py-6 text-center text-sm text-neu-on-surface-variant">No variable spend data yet</p>
+            ) : (
+              <div className="space-y-3">
+                {budget_guidance.variable_caps.map((cap) => (
+                  <div key={cap.mode} className="rounded-xl bg-neu-surface-low/40 p-3 shadow-neu-inset-sm">
+                    <div className="flex items-center justify-between">
+                      <p className="text-xs font-bold uppercase tracking-wider text-neu-on-surface">{cap.mode}</p>
+                      <p className="text-xs text-neu-on-surface-variant">{cap.share_pct.toFixed(1)}% share</p>
+                    </div>
+                    <p className="mt-1 text-sm font-semibold text-brand-teal">{formatRupees(cap.cap_amount)} / month</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </NeuCard>
+        </section>
+
+        {/* ── Actionable insights ────────────────────────────────────────────── */}
+        <section className="pb-6">
+          <NeuCard className="rounded-3xl border border-brand-gold/20 bg-gradient-to-br from-neu-surface via-neu-surface to-brand-gold/5">
+            <div className="mb-4 flex items-center gap-2">
+              <span className="material-symbols-outlined text-brand-gold">auto_awesome</span>
+              <h3 className="text-lg font-semibold text-neu-on-surface">AI Financial Analyst</h3>
+            </div>
+            {data.ai_insight ? (
+              <p className="text-sm font-medium leading-relaxed text-neu-on-surface">
+                {data.ai_insight}
+              </p>
+            ) : (
+              <ul className="space-y-2 text-sm text-neu-on-surface-variant">
+                <li>Set aside at least {formatRupees(budget_guidance.savings_floor_target)} monthly before discretionary spends.</li>
+                <li>
+                  {trend_insights.fixed_cost_ratio_pct > budget_guidance.fixed_cost_ratio_threshold_pct
+                    ? 'Your fixed-cost ratio is above threshold; renegotiate recurring obligations if possible.'
+                    : 'Your fixed-cost ratio is within threshold; keep variable expenses under the suggested caps.'}
+                </li>
+                <li>
+                  Focus on reducing spend concentration in {trend_insights.top_spend_mode ?? 'top modes'} to improve cash-flow resilience.
+                </li>
+                <li>
+                  Latest monthly savings rate: {monthly_kpis.length ? `${monthly_kpis[monthly_kpis.length - 1].savings_rate_pct.toFixed(1)}%` : 'N/A'}.
+                </li>
+              </ul>
+            )}
+          </NeuCard>
         </section>
       </div>
     </AppShell>

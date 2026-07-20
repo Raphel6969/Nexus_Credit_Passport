@@ -23,6 +23,9 @@ from sqlalchemy import text
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.ai import generate_score_explanation, generate_dashboard_insights
+import hashlib
+import json
 
 router = APIRouter()
 
@@ -82,14 +85,19 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
 
     # ── 3. Persist score snapshot ───────────────────────────────────────────
     # Append-only audit row — derived output only, no raw features.
+    
+    # Generate AI explanation
+    ai_explanation = await generate_score_explanation(scoring_result)
+    scoring_result["note"] = ai_explanation
+    
     try:
         computed_at = datetime.now(timezone.utc)
         await db.execute(
             text("""
                 INSERT INTO score_snapshots
-                    (id, business_id, score, confidence, model_version, drivers, computed_at, created_at)
+                    (id, business_id, score, confidence, model_version, drivers, ai_explanation, computed_at, created_at)
                 VALUES
-                    (CAST(:id AS UUID), CAST(:business_id AS UUID), :score, :confidence, :model_version, CAST(:drivers AS JSONB), :computed_at, :created_at)
+                    (CAST(:id AS UUID), CAST(:business_id AS UUID), :score, :confidence, :model_version, CAST(:drivers AS JSONB), :ai_explanation, :computed_at, :created_at)
             """),
             {
                 "id": str(uuid.uuid4()),
@@ -97,7 +105,8 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
                 "score": scoring_result.get("score"),
                 "confidence": scoring_result.get("confidence", "UNKNOWN"),
                 "model_version": scoring_result.get("model_version", "unknown"),
-                "drivers": __import__("json").dumps(scoring_result.get("drivers", [])),
+                "drivers": json.dumps(scoring_result.get("drivers", [])),
+                "ai_explanation": ai_explanation,
                 "computed_at": computed_at,
                 "created_at": computed_at,
             },
@@ -125,7 +134,7 @@ async def get_score_history(
     """
     rows = await db.execute(
         text("""
-            SELECT id, score, confidence, model_version, computed_at
+            SELECT id, score, confidence, model_version, computed_at, ai_explanation
             FROM score_snapshots
             WHERE business_id = :business_id
             ORDER BY computed_at DESC
@@ -140,6 +149,7 @@ async def get_score_history(
             "confidence": row.confidence,
             "model_version": row.model_version,
             "computed_at": row.computed_at.isoformat(),
+            "ai_explanation": row.ai_explanation,
         }
         for row in rows.fetchall()
     ]
@@ -257,14 +267,183 @@ async def get_dashboard(
         for row in recent_rows.fetchall()
     ]
 
+    # ── 5. Expanded analytics + hybrid budget guidance ───────────────────────
+    monthly_kpis = []
+    for m in monthly:
+        earned = int(m["earned"])
+        spent = int(m["spent"])
+        saved = earned - spent
+        savings_rate_pct = (saved / earned * 100.0) if earned > 0 else 0.0
+        monthly_kpis.append(
+            {
+                "month": m["month"],
+                "earned": earned,
+                "spent": spent,
+                "saved": saved,
+                "savings_rate_pct": round(savings_rate_pct, 2),
+            }
+        )
+
+    month_count = len(monthly_kpis)
+    avg_monthly_earned = int(total_earned / month_count) if month_count else 0
+    avg_monthly_spent = int(total_spent / month_count) if month_count else 0
+    avg_monthly_saved = int(total_saved / month_count) if month_count else 0
+
+    best_month = max(monthly_kpis, key=lambda x: x["saved"])["month"] if monthly_kpis else None
+    worst_month = min(monthly_kpis, key=lambda x: x["saved"])["month"] if monthly_kpis else None
+
+    top_mode = modes[0]["mode"] if modes else None
+    top_mode_share_pct = (
+        (modes[0]["amount"] / total_spent * 100.0) if (modes and total_spent > 0) else 0.0
+    )
+
+    fixed_modes = {"NACH", "ECS", "CHEQUE", "RTGS", "NEFT"}
+    fixed_spend_total = sum(m["amount"] for m in modes if m["mode"] in fixed_modes)
+    fixed_cost_ratio_pct = (
+        (fixed_spend_total / total_spent * 100.0) if total_spent > 0 else 0.0
+    )
+
+    savings_floor_target = max(int(avg_monthly_earned * 0.20), 0)
+    fixed_cost_ratio_threshold_pct = 50.0
+    variable_caps = []
+    if total_spent > 0 and avg_monthly_spent > 0:
+        for m in modes:
+            if m["mode"] in fixed_modes:
+                continue
+            share_pct = (m["amount"] / total_spent) * 100.0
+            variable_caps.append(
+                {
+                    "mode": m["mode"],
+                    "cap_amount": int(avg_monthly_spent * (share_pct / 100.0)),
+                    "share_pct": round(share_pct, 2),
+                }
+            )
+    variable_caps = sorted(variable_caps, key=lambda x: x["cap_amount"], reverse=True)[:5]
+
+    summary = {
+        "total_earned": total_earned,
+        "total_spent": total_spent,
+        "total_saved": total_saved,
+    }
+    
+    trend_insights_data = {
+        "avg_monthly_earned": avg_monthly_earned,
+        "avg_monthly_spent": avg_monthly_spent,
+        "avg_monthly_saved": avg_monthly_saved,
+        "best_month": best_month,
+        "worst_month": worst_month,
+        "top_spend_mode": top_mode,
+        "top_spend_mode_share_pct": round(top_mode_share_pct, 2),
+        "fixed_cost_ratio_pct": round(fixed_cost_ratio_pct, 2),
+    }
+    
+    budget_guidance_data = {
+        "savings_floor_target": savings_floor_target,
+        "fixed_cost_ratio_threshold_pct": fixed_cost_ratio_threshold_pct,
+        "variable_caps": variable_caps,
+    }
+
+    # ── 6. Caching & Generating AI Insight ───────────────────────────────────
+    # We hash the KPIs to see if the data changed since the last generated insight.
+    raw_hash_data = json.dumps({
+        "summary": summary,
+        "monthly": monthly,
+        "modes": modes
+    }, sort_keys=True).encode("utf-8")
+    data_hash = hashlib.sha256(raw_hash_data).hexdigest()
+
+    # Check cache
+    cache_row = await db.execute(
+        text("""
+            SELECT insight_text FROM dashboard_insights
+            WHERE business_id = CAST(:business_id AS UUID) AND data_hash = :data_hash
+            ORDER BY created_at DESC LIMIT 1
+        """),
+        {"business_id": business_id, "data_hash": data_hash}
+    )
+    cache_result = cache_row.fetchone()
+    
+    if cache_result:
+        ai_insight = cache_result.insight_text
+    else:
+        # Generate new insight
+        ai_insight = await generate_dashboard_insights(
+            summary, monthly_kpis, trend_insights_data, budget_guidance_data
+        )
+        
+        # Save to cache
+        try:
+            await db.execute(
+                text("""
+                    INSERT INTO dashboard_insights (id, business_id, data_hash, insight_text)
+                    VALUES (CAST(:id AS UUID), CAST(:business_id AS UUID), :data_hash, :insight_text)
+                """),
+                {
+                    "id": str(uuid.uuid4()),
+                    "business_id": business_id,
+                    "data_hash": data_hash,
+                    "insight_text": ai_insight
+                }
+            )
+            await db.commit()
+        except Exception as e:
+            await db.rollback()
+            import logging
+            logging.getLogger(__name__).warning("Failed to persist dashboard insight cache: %s", e)
+
     return {
         "business_id": business_id,
-        "summary": {
-            "total_earned": total_earned,
-            "total_spent": total_spent,
-            "total_saved": total_saved,
-        },
+        "summary": summary,
         "monthly": monthly,
         "modes": modes,
         "recent_transactions": recent,
+        "monthly_kpis": monthly_kpis,
+        "trend_insights": trend_insights_data,
+        "budget_guidance": budget_guidance_data,
+        "ai_insight": ai_insight,
     }
+
+
+@router.get("/businesses/{business_id}/transactions/upi")
+async def get_upi_transactions(
+    business_id: str,
+    limit: int = 50,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return recent UPI credit transactions for a business.
+    Used by the web UPI console in live mode.
+    """
+    rows = await db.execute(
+        text(
+            """
+            SELECT
+                t.id,
+                t.amount,
+                t.currency,
+                t.reference_number,
+                EXTRACT(EPOCH FROM t.timestamp)::BIGINT AS created_at
+            FROM transactions t
+            JOIN accounts a ON t.account_id = a.id
+            WHERE a.business_id = CAST(:business_id AS UUID)
+              AND t.mode = 'UPI'
+              AND t.type = 'CREDIT'
+            ORDER BY t.timestamp DESC
+            LIMIT :limit
+            """
+        ),
+        {"business_id": business_id, "limit": min(limit, 100)},
+    )
+    items = [
+        {
+            "id": str(r.id),
+            "amount": int(r.amount),
+            "currency": r.currency or "INR",
+            "status": "captured",
+            "email": "UPI Payer",
+            "reference_number": r.reference_number,
+            "created_at": int(r.created_at),
+        }
+        for r in rows.fetchall()
+    ]
+    return {"items": items, "count": len(items)}

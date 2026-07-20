@@ -34,7 +34,7 @@ export default function LoginPage() {
 
     try {
       await triggerIngest(trimmedBusinessId);
-      router.replace(`/score-board?businessId=${encodeURIComponent(trimmedBusinessId)}`);
+      router.replace(`/dashboard?businessId=${encodeURIComponent(trimmedBusinessId)}`);
     } catch (submitError) {
       setError(
         submitError instanceof Error

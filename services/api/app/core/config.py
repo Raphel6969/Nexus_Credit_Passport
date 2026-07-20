@@ -20,7 +20,7 @@ class Settings(BaseSettings):
     # Downstream service URLs
     SCORING_SERVICE_URL: str = "http://localhost:8081"
     INGESTION_SERVICE_URL: str = "http://localhost:8080"
-
+    GROQ_API_KEY: str = ""
 
 settings = Settings()
 

@@ -103,7 +103,7 @@ class Transaction(Base):
     counterparty = relationship("Counterparty")
 
     __table_args__ = (
-        Index('ix_transactions_account_timestamp', 'account_id', timestamp.desc()),
+        Index('ix_transactions_account_timestamp', 'account_id', 'timestamp'),
     )
 
 

@@ -42,6 +42,7 @@ export interface ScoreData {
   confidence: string;
   model_version: string;
   drivers: ScoreDriver[];
+  note?: string;
 }
 
 export interface ShareToken {
@@ -145,12 +146,45 @@ export interface DashboardSummary {
   total_saved: number;
 }
 
+export interface DashboardMonthlyKPI {
+  month: string;
+  earned: number;
+  spent: number;
+  saved: number;
+  savings_rate_pct: number;
+}
+
+export interface DashboardTrendInsights {
+  avg_monthly_earned: number;
+  avg_monthly_spent: number;
+  avg_monthly_saved: number;
+  best_month: string | null;
+  worst_month: string | null;
+  top_spend_mode: string | null;
+  top_spend_mode_share_pct: number;
+  fixed_cost_ratio_pct: number;
+}
+
+export interface DashboardBudgetGuidance {
+  savings_floor_target: number;
+  fixed_cost_ratio_threshold_pct: number;
+  variable_caps: Array<{
+    mode: string;
+    cap_amount: number;
+    share_pct: number;
+  }>;
+}
+
 export interface DashboardData {
   business_id: string;
   summary: DashboardSummary;
   monthly: MonthlyDataPoint[];
   modes: ModeBreakdown[];
   recent_transactions: RecentTransaction[];
+  monthly_kpis: DashboardMonthlyKPI[];
+  trend_insights: DashboardTrendInsights;
+  budget_guidance: DashboardBudgetGuidance;
+  ai_insight?: string;
 }
 
 export async function fetchDashboard(businessId: string): Promise<DashboardData> {
