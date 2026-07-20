@@ -16,7 +16,7 @@ async def check_rate_limit(request: Request, api_key: str = Depends(api_key_head
     # Use API key if provided, fallback to client IP
     identifier = api_key or (request.client.host if request.client else "unknown")
     
-    is_allowed, retry_after = limiter.consume(identifier)
+    is_allowed, retry_after = await limiter.consume(identifier)
     if not is_allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,

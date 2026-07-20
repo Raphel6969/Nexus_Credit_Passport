@@ -151,3 +151,120 @@ async def get_score_history(
         )
 
     return {"business_id": business_id, "history": history}
+
+
+@router.get("/businesses/{business_id}/dashboard")
+async def get_dashboard(
+    business_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return a full financial dashboard for a business:
+      - total earned (CREDIT), total spent (DEBIT), total saved
+      - monthly breakdown for the last 12 months
+      - spending by payment mode
+      - 20 most-recent transactions
+    Amounts are returned in paise (minor units). Divide by 100 for ₹.
+    """
+    # ── 1. Monthly earned / spent for last 12 months ─────────────────────────
+    monthly_rows = await db.execute(
+        text("""
+            SELECT
+                DATE_TRUNC('month', t.timestamp) AS month,
+                t.type,
+                SUM(t.amount)                    AS total
+            FROM transactions t
+            JOIN accounts a ON t.account_id = a.id
+            WHERE a.business_id = CAST(:business_id AS UUID)
+              AND t.timestamp >= NOW() - INTERVAL '12 months'
+              AND t.revenue_role = 'primary'
+            GROUP BY month, t.type
+            ORDER BY month ASC
+        """),
+        {"business_id": business_id},
+    )
+    monthly_raw = monthly_rows.fetchall()
+
+    # Build a sorted list of months with CREDIT / DEBIT buckets
+    from collections import defaultdict
+    monthly_map: dict = defaultdict(lambda: {"earned": 0, "spent": 0})
+    for row in monthly_raw:
+        key = row.month.strftime("%Y-%m")
+        if row.type == "CREDIT":
+            monthly_map[key]["earned"] += int(row.total)
+        else:
+            monthly_map[key]["spent"] += int(row.total)
+
+    monthly = [
+        {"month": k, "earned": v["earned"], "spent": v["spent"]}
+        for k, v in sorted(monthly_map.items())
+    ]
+
+    # ── 2. Overall totals ────────────────────────────────────────────────────
+    total_earned = sum(m["earned"] for m in monthly)
+    total_spent = sum(m["spent"] for m in monthly)
+    total_saved = total_earned - total_spent
+
+    # ── 3. Spending by payment mode ──────────────────────────────────────────
+    mode_rows = await db.execute(
+        text("""
+            SELECT
+                COALESCE(t.mode, 'OTHERS') AS mode,
+                SUM(t.amount)              AS total
+            FROM transactions t
+            JOIN accounts a ON t.account_id = a.id
+            WHERE a.business_id = CAST(:business_id AS UUID)
+              AND t.type = 'DEBIT'
+              AND t.revenue_role = 'primary'
+            GROUP BY mode
+            ORDER BY total DESC
+        """),
+        {"business_id": business_id},
+    )
+    modes = [
+        {"mode": row.mode, "amount": int(row.total)}
+        for row in mode_rows.fetchall()
+    ]
+
+    # ── 4. Recent transactions (last 20) ─────────────────────────────────────
+    recent_rows = await db.execute(
+        text("""
+            SELECT
+                t.id,
+                t.amount,
+                t.type,
+                t.mode,
+                t.timestamp,
+                t.currency
+            FROM transactions t
+            JOIN accounts a ON t.account_id = a.id
+            WHERE a.business_id = CAST(:business_id AS UUID)
+              AND t.revenue_role = 'primary'
+            ORDER BY t.timestamp DESC
+            LIMIT 20
+        """),
+        {"business_id": business_id},
+    )
+    recent = [
+        {
+            "id": str(row.id),
+            "amount": int(row.amount),
+            "type": row.type,
+            "mode": row.mode or "OTHERS",
+            "timestamp": row.timestamp.isoformat(),
+            "currency": row.currency,
+        }
+        for row in recent_rows.fetchall()
+    ]
+
+    return {
+        "business_id": business_id,
+        "summary": {
+            "total_earned": total_earned,
+            "total_spent": total_spent,
+            "total_saved": total_saved,
+        },
+        "monthly": monthly,
+        "modes": modes,
+        "recent_transactions": recent,
+    }

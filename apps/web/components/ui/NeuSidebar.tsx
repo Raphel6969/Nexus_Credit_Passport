@@ -11,6 +11,7 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  { href: '/dashboard', icon: 'bar_chart', label: 'Dashboard' },
   { href: '/score-board', icon: 'dashboard', label: 'Score Board' },
   { href: '/adapters', icon: 'hub', label: 'Adapters' },
   { href: '/share-history', icon: 'history', label: 'Share History' },

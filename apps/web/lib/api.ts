@@ -116,3 +116,43 @@ export async function triggerIngest(businessId: string, source = 'aa') {
   }
   return payload;
 }
+
+// ── Dashboard ─────────────────────────────────────────────────────────────────
+
+export interface MonthlyDataPoint {
+  month: string;   // "YYYY-MM"
+  earned: number;  // paise
+  spent: number;   // paise
+}
+
+export interface ModeBreakdown {
+  mode: string;
+  amount: number; // paise
+}
+
+export interface RecentTransaction {
+  id: string;
+  amount: number;  // paise
+  type: 'CREDIT' | 'DEBIT';
+  mode: string;
+  timestamp: string;
+  currency: string;
+}
+
+export interface DashboardSummary {
+  total_earned: number;
+  total_spent: number;
+  total_saved: number;
+}
+
+export interface DashboardData {
+  business_id: string;
+  summary: DashboardSummary;
+  monthly: MonthlyDataPoint[];
+  modes: ModeBreakdown[];
+  recent_transactions: RecentTransaction[];
+}
+
+export async function fetchDashboard(businessId: string): Promise<DashboardData> {
+  return apiFetch(`/api/businesses/${encodeURIComponent(businessId)}/dashboard`);
+}
