@@ -14,19 +14,19 @@ import (
 )
 
 type Connector struct {
-	baseURL string
-	clientID string
+	baseURL   string
+	clientID  string
 	clientSec string
-	orgID   string
-	http    *http.Client
+	orgID     string
+	http      *http.Client
 }
 
 func NewConnector() *Connector {
 	return &Connector{
-		baseURL: strings.TrimRight(os.Getenv("ZOHO_BASE_URL"), "/"),
-		clientID: os.Getenv("ZOHO_CLIENT_ID"),
+		baseURL:   strings.TrimRight(os.Getenv("ZOHO_BASE_URL"), "/"),
+		clientID:  os.Getenv("ZOHO_CLIENT_ID"),
 		clientSec: os.Getenv("ZOHO_CLIENT_SECRET"),
-		orgID:   os.Getenv("ZOHO_ORG_ID"),
+		orgID:     os.Getenv("ZOHO_ORG_ID"),
 		http: &http.Client{
 			Timeout: 30 * time.Second,
 		},
@@ -47,13 +47,13 @@ func (c *Connector) Sync(ctx context.Context, req connectors.SyncRequest) (*conn
 
 	var invRes struct {
 		Invoices []struct {
-			InvoiceID   string  `json:"invoice_id"`
+			InvoiceID    string  `json:"invoice_id"`
 			CustomerName string  `json:"customer_name"`
-			Total       float64 `json:"total"`
-			Currency    string  `json:"currency_code"`
-			Date        string  `json:"date"`
-			DueDate     string  `json:"due_date"`
-			Status      string  `json:"status"` // draft, sent, overdue, paid, void
+			Total        float64 `json:"total"`
+			Currency     string  `json:"currency_code"`
+			Date         string  `json:"date"`
+			DueDate      string  `json:"due_date"`
+			Status       string  `json:"status"` // draft, sent, overdue, paid, void
 		} `json:"invoices"`
 	}
 	if err := json.Unmarshal(binv, &invRes); err != nil {
@@ -72,7 +72,7 @@ func (c *Connector) Sync(ctx context.Context, req connectors.SyncRequest) (*conn
 		}
 		if ri.Status == "PAID" {
 			// mock paid date as due date for now
-			ri.PaidDate = inv.DueDate 
+			ri.PaidDate = inv.DueDate
 		}
 		result.Invoices = append(result.Invoices, ri)
 
@@ -95,13 +95,13 @@ func (c *Connector) Sync(ctx context.Context, req connectors.SyncRequest) (*conn
 
 	var billRes struct {
 		Bills []struct {
-			BillID      string  `json:"bill_id"`
-			VendorName  string  `json:"vendor_name"`
-			Total       float64 `json:"total"`
-			Currency    string  `json:"currency_code"`
-			Date        string  `json:"date"`
-			DueDate     string  `json:"due_date"`
-			Status      string  `json:"status"` // draft, open, overdue, paid, void
+			BillID     string  `json:"bill_id"`
+			VendorName string  `json:"vendor_name"`
+			Total      float64 `json:"total"`
+			Currency   string  `json:"currency_code"`
+			Date       string  `json:"date"`
+			DueDate    string  `json:"due_date"`
+			Status     string  `json:"status"` // draft, open, overdue, paid, void
 		} `json:"bills"`
 	}
 	if err := json.Unmarshal(bb, &billRes); err != nil {
@@ -119,7 +119,7 @@ func (c *Connector) Sync(ctx context.Context, req connectors.SyncRequest) (*conn
 			Status:      strings.ToUpper(bill.Status),
 		}
 		if ri.Status == "PAID" {
-			ri.PaidDate = bill.DueDate 
+			ri.PaidDate = bill.DueDate
 		}
 		result.Invoices = append(result.Invoices, ri)
 

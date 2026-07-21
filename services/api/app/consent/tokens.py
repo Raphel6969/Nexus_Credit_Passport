@@ -1,5 +1,4 @@
 import secrets
-import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -7,7 +6,7 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
-from app.models.graph import ConsentToken, ConsentAuditLog, Business, ScoreSnapshot
+from app.models.graph import ConsentToken, ConsentAuditLog, Business
 
 async def mint_token(
     db: AsyncSession,

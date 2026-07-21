@@ -1,6 +1,9 @@
 package queue
 
-// Queue interface for async ingestion jobs
+import (
+	"context"
+	"time"
+) // Queue interface for async ingestion jobs
 type Queue interface {
 	Enqueue(job IngestionJob) error
 	Dequeue(ctx context.Context) (IngestionJob, error)

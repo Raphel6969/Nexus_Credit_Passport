@@ -34,12 +34,12 @@ type SyncResult struct {
 type RawAccountUpdate struct {
 	AccountID           string
 	BusinessID          string
-	SourceType          string  // AA / GSTN / RAZORPAY / ZOHO
+	SourceType          string // AA / GSTN / RAZORPAY / ZOHO
 	MaskedAccountNumber string
-	AccountType         string  // SAVINGS / CURRENT / OVERDRAFT
+	AccountType         string // SAVINGS / CURRENT / OVERDRAFT
 	IFSCCode            string
-	Balance             *int64  // paise
-	BalanceAt           string  // ISO 8601
+	Balance             *int64 // paise
+	BalanceAt           string // ISO 8601
 }
 
 // RawTransaction is the canonical intermediate representation produced by any
@@ -73,12 +73,12 @@ type RawCounterparty struct {
 
 // RawTaxFiling is a GST return summary from the GSTN connector.
 type RawTaxFiling struct {
-	ReturnType     string // GSTR3B / GSTR1 / GSTR2A
-	Period         string // "2025-06" (YYYY-MM)
-	GrossTurnover  *int64 // paise
-	TaxPaid        *int64 // paise
-	FilingDate     string // YYYY-MM-DD
-	Status         string // FILED / PENDING / LATE
+	ReturnType    string // GSTR3B / GSTR1 / GSTR2A
+	Period        string // "2025-06" (YYYY-MM)
+	GrossTurnover *int64 // paise
+	TaxPaid       *int64 // paise
+	FilingDate    string // YYYY-MM-DD
+	Status        string // FILED / PENDING / LATE
 }
 
 // RawInvoice is an invoice/bill from the Zoho Books connector.

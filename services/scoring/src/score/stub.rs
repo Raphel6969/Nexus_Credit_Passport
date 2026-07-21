@@ -100,7 +100,7 @@ pub fn compute_score(input: &ScoringInput) -> ScoringOutput {
     }
 
     // Clamp to 300–850 range
-    let score = score.max(300.0).min(850.0) as u16;
+    let score = score.clamp(300.0, 850.0) as u16;
 
     let confidence = if input.total_transactions >= 50 {
         "MEDIUM"

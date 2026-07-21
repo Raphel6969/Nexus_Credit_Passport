@@ -342,6 +342,34 @@ function DashboardContent() {
             </div>
           </NeuCard>
         </section>
+
+        {/* Risk Alerts (Fraud & AML) */}
+        {scoreData?.anomaly_flags && scoreData.anomaly_flags.length > 0 && (
+          <section className="pb-8">
+            <NeuCard className="rounded-3xl border border-neu-error/20 bg-neu-error/5">
+              <div className="mb-6 flex items-center gap-2">
+                <span className="material-symbols-outlined text-neu-error">warning</span>
+                <h3 className="text-lg font-semibold text-neu-error">Risk Alerts (AML & Fraud)</h3>
+              </div>
+              <div className="space-y-4">
+                {scoreData.anomaly_flags.map((flag, idx) => (
+                  <div key={idx} className="flex items-start gap-3 rounded-2xl bg-neu-surface-low p-4 shadow-neu-inset-sm">
+                    <span className={`material-symbols-outlined mt-0.5 text-lg ${flag.severity === 'CRITICAL' ? 'text-neu-error' : 'text-brand-gold'}`}>
+                      {flag.severity === 'CRITICAL' ? 'gpp_bad' : 'gpp_maybe'}
+                    </span>
+                    <div>
+                      <h4 className="font-bold text-neu-on-surface mb-1">{flag.rule_name.replace(/_/g, ' ')}</h4>
+                      <p className="text-sm text-neu-on-surface-variant">{flag.description}</p>
+                    </div>
+                    <span className={`ml-auto shrink-0 rounded-full px-2 py-1 text-[10px] font-bold uppercase tracking-wider ${flag.severity === 'CRITICAL' ? 'bg-neu-error/10 text-neu-error' : 'bg-brand-gold/10 text-brand-gold'}`}>
+                      {flag.severity}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </NeuCard>
+          </section>
+        )}
       </div>
     </AppShell>
   );

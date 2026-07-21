@@ -74,7 +74,7 @@ impl FeatureExtractor {
         Self { pool }
     }
 
-    pub async fn extract(&self, business_id: Uuid) -> Result<Features> {
+    pub async fn extract(&self, business_id: Uuid) -> Result<(Features, Vec<crate::AnomalyFlag>)> {
         // ── Transaction aggregates ──────────────────────────────────────────
         // Only reads amount, type, mode, revenue_role — no PII columns.
         let txn_row = sqlx::query(
@@ -225,7 +225,73 @@ impl FeatureExtractor {
         let nach_penalty = (nach_debit_count / 10.0).clamp(0.0, 0.5);
         let revenue_consistency = (cf_score - nach_penalty).clamp(0.0, 1.0);
 
-        Ok(Features {
+        // ── Anomaly Detection (Phase 2) ─────────────────────────────────────
+        let mut anomaly_flags = Vec::new();
+
+        // Anomaly 1: Midnight UPI Spikes
+        let midnight_row = sqlx::query(
+            r#"
+            SELECT COUNT(*)::BIGINT AS midnight_upi_count
+            FROM transactions t
+            JOIN accounts a ON t.account_id = a.id
+            WHERE a.business_id = $1
+              AND t.mode = 'UPI'
+              AND t.type = 'CREDIT'
+              AND EXTRACT(HOUR FROM t.timestamp AT TIME ZONE 'Asia/Kolkata') BETWEEN 0 AND 4
+            "#,
+        )
+        .bind(business_id)
+        .fetch_one(&self.pool)
+        .await
+        .context("midnight upi query failed")?;
+        
+        let midnight_upi_count: i64 = midnight_row.try_get("midnight_upi_count").unwrap_or(0);
+        if midnight_upi_count > 10 {
+            anomaly_flags.push(crate::AnomalyFlag {
+                rule_name: "MIDNIGHT_UPI_SPIKE".to_string(),
+                description: format!("Detected {} UPI credit transactions between 12 AM and 5 AM.", midnight_upi_count),
+                severity: "WARNING".to_string(),
+            });
+        }
+
+        // Anomaly 2: High Revenue Concentration
+        let concentration_row_f64 = sqlx::query(
+            r#"
+            SELECT CAST(MAX(counterparty_total) * 100.0 / NULLIF(SUM(counterparty_total), 0) AS DOUBLE PRECISION) AS max_concentration_pct
+            FROM (
+                SELECT t.counterparty_id, SUM(t.amount) as counterparty_total
+                FROM transactions t
+                JOIN accounts a ON t.account_id = a.id
+                WHERE a.business_id = $1
+                  AND t.type = 'CREDIT'
+                  AND t.counterparty_id IS NOT NULL
+                GROUP BY t.counterparty_id
+            ) sub
+            "#,
+        )
+        .bind(business_id)
+        .fetch_one(&self.pool)
+        .await
+        .context("revenue concentration query failed")?;
+
+        let max_concentration_pct: Option<f64> = concentration_row_f64.try_get("max_concentration_pct").ok();
+        if let Some(pct) = max_concentration_pct {
+            if pct > 80.0 {
+                anomaly_flags.push(crate::AnomalyFlag {
+                    rule_name: "HIGH_REVENUE_CONCENTRATION".to_string(),
+                    description: format!("Dangerous revenue concentration: {:.1}% of revenue comes from a single customer.", pct),
+                    severity: "CRITICAL".to_string(),
+                });
+            } else if pct > 50.0 {
+                anomaly_flags.push(crate::AnomalyFlag {
+                    rule_name: "ELEVATED_REVENUE_CONCENTRATION".to_string(),
+                    description: format!("Elevated concentration: {:.1}% of revenue comes from a single customer.", pct),
+                    severity: "WARNING".to_string(),
+                });
+            }
+        }
+
+        Ok((Features {
             business_id,
             total_transactions,
             upi_ratio,
@@ -239,7 +305,7 @@ impl FeatureExtractor {
             data_window_months,
             transaction_velocity,
             revenue_consistency,
-        })
+        }, anomaly_flags))
     }
 }
 

@@ -32,7 +32,8 @@ type Client struct {
 }
 
 // NewClientFromEnv creates a Setu client from environment variables:
-//   SETU_BASE_URL, SETU_CLIENT_ID, SETU_CLIENT_SECRET, SETU_PRODUCT_INSTANCE_ID
+//
+//	SETU_BASE_URL, SETU_CLIENT_ID, SETU_CLIENT_SECRET, SETU_PRODUCT_INSTANCE_ID
 func NewClientFromEnv() *Client {
 	return &Client{
 		baseURL:           strings.TrimRight(os.Getenv("SETU_BASE_URL"), "/"),

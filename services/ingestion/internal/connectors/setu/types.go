@@ -19,10 +19,10 @@ type ConsentRequest struct {
 type ConsentDetail struct {
 	ConsentStart  string       `json:"consentStart"`
 	ConsentExpiry string       `json:"consentExpiry"`
-	ConsentMode   string       `json:"consentMode"`   // STORE
-	FetchType     string       `json:"fetchType"`     // PERIODIC
-	ConsentTypes  []string     `json:"consentTypes"`  // ["PROFILE","SUMMARY","TRANSACTIONS"]
-	FITypes       []string     `json:"fiTypes"`       // ["DEPOSIT"]
+	ConsentMode   string       `json:"consentMode"`  // STORE
+	FetchType     string       `json:"fetchType"`    // PERIODIC
+	ConsentTypes  []string     `json:"consentTypes"` // ["PROFILE","SUMMARY","TRANSACTIONS"]
+	FITypes       []string     `json:"fiTypes"`      // ["DEPOSIT"]
 	DataConsumer  DataConsumer `json:"DataConsumer"`
 	Customer      Customer     `json:"Customer"`
 	Purpose       Purpose      `json:"Purpose"`
@@ -70,7 +70,7 @@ type DateRange struct {
 
 // TimeUnit represents a duration (e.g. DataLife, Frequency).
 type TimeUnit struct {
-	Unit  string `json:"unit"`  // YEAR / MONTH / DAY / HOUR
+	Unit  string `json:"unit"` // YEAR / MONTH / DAY / HOUR
 	Value int    `json:"value"`
 }
 
@@ -109,9 +109,9 @@ type SessionResponse struct {
 
 // FIDataResponse is returned by GET /sessions/{id} once COMPLETED.
 type FIDataResponse struct {
-	Ver       string   `json:"ver"`
-	Timestamp string   `json:"timestamp"`
-	TxnID     string   `json:"txnid"`
+	Ver       string    `json:"ver"`
+	Timestamp string    `json:"timestamp"`
+	TxnID     string    `json:"txnid"`
 	FI        []FIPData `json:"FI"`
 }
 
@@ -123,16 +123,16 @@ type FIPData struct {
 
 // FIAccount is a single linked account with its Profile, Summary, and Transactions.
 type FIAccount struct {
-	LinkRefNumber    string    `json:"linkRefNumber"`
-	MaskedAccNumber  string    `json:"maskedAccNumber"`
-	Account          AAAccount `json:"account"`
+	LinkRefNumber   string    `json:"linkRefNumber"`
+	MaskedAccNumber string    `json:"maskedAccNumber"`
+	Account         AAAccount `json:"account"`
 }
 
 // AAAccount is the decoded FI data for a DEPOSIT account.
 type AAAccount struct {
-	Type         string        `json:"type"`    // deposit
-	Profile      *AAProfile    `json:"Profile,omitempty"`
-	Summary      *AASummary    `json:"Summary,omitempty"`
+	Type         string          `json:"type"` // deposit
+	Profile      *AAProfile      `json:"Profile,omitempty"`
+	Summary      *AASummary      `json:"Summary,omitempty"`
 	Transactions *AATransactions `json:"Transactions,omitempty"`
 }
 
@@ -160,16 +160,16 @@ type AAHolder struct {
 
 // AASummary contains the current account summary from the FIP.
 type AASummary struct {
-	CurrentBalance  float64   `json:"currentBalance"`
-	Currency        string    `json:"currency"`
-	BalanceDateTime string    `json:"balanceDateTime"`
-	Type            string    `json:"type"`       // SAVINGS / CURRENT / OVERDRAFT
-	Branch          string    `json:"branch"`
-	Facility        string    `json:"facility"`   // OD etc.
-	IFSCCode        string    `json:"ifscCode"`
-	MICRCode        string    `json:"micrCode"`
-	OpeningDate     string    `json:"openingDate"`
-	Status          string    `json:"status"`     // ACTIVE / INACTIVE / DORMANT
+	CurrentBalance  float64 `json:"currentBalance"`
+	Currency        string  `json:"currency"`
+	BalanceDateTime string  `json:"balanceDateTime"`
+	Type            string  `json:"type"` // SAVINGS / CURRENT / OVERDRAFT
+	Branch          string  `json:"branch"`
+	Facility        string  `json:"facility"` // OD etc.
+	IFSCCode        string  `json:"ifscCode"`
+	MICRCode        string  `json:"micrCode"`
+	OpeningDate     string  `json:"openingDate"`
+	Status          string  `json:"status"` // ACTIVE / INACTIVE / DORMANT
 }
 
 // AATransactions is the transaction list from the FIP.
@@ -182,13 +182,13 @@ type AATransactions struct {
 // AATransaction is a single transaction per Rebit AA v2.0.0 schema.
 // Mode values: UPI / NEFT / RTGS / IMPS / NACH / ATM / CARD / CHEQUE / ECS / CASH / OTHERS
 type AATransaction struct {
-	TxnID                 string   `json:"txnId"`
-	Type                  string   `json:"type"`                  // CREDIT / DEBIT
-	Mode                  string   `json:"mode"`                  // UPI / NEFT / RTGS / IMPS / NACH / ATM / CARD / CHEQUE / ECS / OTHERS
-	Amount                float64  `json:"amount"`
-	TransactionalBalance  *float64 `json:"transactionalBalance,omitempty"`
-	TransactionTimestamp  string   `json:"transactionTimestamp"`
-	ValueDate             string   `json:"valueDate"`
-	Narration             string   `json:"narration"`
-	Reference             string   `json:"reference"`
+	TxnID                string   `json:"txnId"`
+	Type                 string   `json:"type"` // CREDIT / DEBIT
+	Mode                 string   `json:"mode"` // UPI / NEFT / RTGS / IMPS / NACH / ATM / CARD / CHEQUE / ECS / OTHERS
+	Amount               float64  `json:"amount"`
+	TransactionalBalance *float64 `json:"transactionalBalance,omitempty"`
+	TransactionTimestamp string   `json:"transactionTimestamp"`
+	ValueDate            string   `json:"valueDate"`
+	Narration            string   `json:"narration"`
+	Reference            string   `json:"reference"`
 }

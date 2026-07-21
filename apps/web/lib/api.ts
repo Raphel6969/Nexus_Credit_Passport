@@ -37,11 +37,18 @@ export interface ScoreDriver {
   human_note: string;
 }
 
+export interface AnomalyFlag {
+  rule_name: string;
+  description: string;
+  severity: 'CRITICAL' | 'WARNING';
+}
+
 export interface ScoreData {
   score: number;
   confidence: string;
   model_version: string;
   drivers: ScoreDriver[];
+  anomaly_flags?: AnomalyFlag[];
   note?: string;
 }
 
@@ -189,4 +196,41 @@ export interface DashboardData {
 
 export async function fetchDashboard(businessId: string): Promise<DashboardData> {
   return apiFetch(`/api/businesses/${encodeURIComponent(businessId)}/dashboard`);
+}
+
+// ── Stress Test Simulator ───────────────────────────────────────────────────
+
+export interface FcfDataPoint {
+  month: string;
+  fcf: number;
+  earned: number;
+  spent: number;
+}
+
+export interface StressTestData {
+  business_id: string;
+  loan_details: {
+    amount: number;
+    rate_pct: number;
+    tenure_months: number;
+    emi: number;
+  };
+  fcf_history: FcfDataPoint[];
+  ai_analysis: string;
+}
+
+export async function fetchStressTest(
+  businessId: string,
+  amount: number,
+  rate: number,
+  tenureMonths: number
+): Promise<StressTestData> {
+  const params = new URLSearchParams({
+    amount: amount.toString(),
+    rate: rate.toString(),
+    tenure_months: tenureMonths.toString(),
+  });
+  return apiFetch(
+    `/api/businesses/${encodeURIComponent(businessId)}/stress-test?${params.toString()}`
+  );
 }

@@ -11,6 +11,7 @@ import {
   type ModeBreakdown,
   type RecentTransaction,
 } from '../../lib/api';
+import { LoanSimulator } from '../../components/LoanSimulator';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -638,6 +639,11 @@ function DashboardContent() {
               </ul>
             )}
           </NeuCard>
+        </section>
+
+        {/* ── Phase 1: Loan Simulator ──────────────────────────────────────── */}
+        <section className="pb-12">
+          <LoanSimulator businessId={businessId} />
         </section>
       </div>
     </AppShell>

@@ -101,3 +101,29 @@ async def generate_dashboard_insights(summary: dict, monthly_kpis: list, trend_i
         return "Connect more data sources to receive personalized AI insights on your financial health."
         
     return insight
+
+
+async def generate_stress_test_analysis(monthly_fcf: list, emi: float, amount: float, tenure_months: int) -> str:
+    """
+    Generates an AI risk assessment of whether a business can afford a specific EMI
+    based on their historical monthly free cash flow (FCF).
+    """
+    system_prompt = (
+        "You are an expert credit risk officer. The user is simulating a loan. "
+        "Analyze their historical monthly Free Cash Flow (FCF) against the simulated EMI. "
+        "Provide a concise, 2-sentence verdict (e.g. 'Low Risk', 'High Risk') and explain if their cash flow "
+        "can comfortably cover the EMI. Mention if they have negative months."
+    )
+    
+    user_prompt = (
+        f"Simulated Loan: {amount} over {tenure_months} months. EMI is {emi}. "
+        f"Here is my Free Cash Flow (FCF) for recent months: {json.dumps(monthly_fcf)}. "
+        f"Can I afford this loan?"
+    )
+    
+    analysis = await _call_groq_api(system_prompt, user_prompt, max_tokens=100)
+    
+    if not analysis:
+        return "Based on your cash flow history, please consult a financial advisor before taking on this debt burden."
+        
+    return analysis

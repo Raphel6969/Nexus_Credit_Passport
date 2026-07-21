@@ -128,15 +128,40 @@ Also added: `GET /v1/businesses/{id}/score/history` — returns scoring history 
 
 ---
 
-## 🚀 Phase 6: UI Pass (Neumorphic Dashboard) (Next)
-- NeuCard, NeuButton, NeuGauge, NeuToggle components
-- Login / consent linking screen
-- Dashboard: centered score gauge (neu gauge)
-- Score driver panel (strengths/weaknesses from SHAP)
-- Share Passport panel with scope toggles
-- Tailwind config with navy/teal/gold palette
+### Phase 6: UI Pass (Neumorphic Dashboard) ✅
+- Implemented Neumorphic design system (NeuCard, NeuButton, NeuGauge, NeuSegmentedControl) with custom Tailwind dark theme.
+- Interactive Dashboard: centered score gauge, SHAP score driver list, link-sharing with custom expiry dates & scope toggles.
+- Live Account Aggregator (AA) and Razorpay ingestion console.
 
 ---
+
+## 🌟 Nexus V2 Product Features
+
+### V2 Phase 1: "What-If" EMI Stress Test Simulator ✅
+*Proving whether a business can afford a specific loan based on historical cash flow.*
+- **Backend (Python)**: `GET /v1/businesses/{id}/stress-test` endpoint. Calculates monthly EMI, extracts 12-month historical Free Cash Flow (FCF), and calls Groq AI (`llama-3.1-8b-instant`) for credit risk analysis.
+- **Frontend (Next.js)**: `LoanSimulator.tsx` Neumorphic component with interactive Loan Amount, Interest Rate, and Tenure sliders, color-coded FCF vs. EMI bar chart, and AI verdict card.
+- **Bugs Fixed**: Clamped EMI bar chart scaling factor to `maxVal = Math.max(emi, max_fcf)` to prevent bar height overflow out of chart container.
+
+### V2 Phase 2: Fraud Detection & AML (Banker Persona) ✅
+*Identifying synthetic identities and suspicious cash flow behaviors.*
+- **Backend (Rust)**: Expanded `FeatureExtractor` in `services/scoring/src/features/extractor.rs` to run deep SQL anomaly checks:
+  1. `MIDNIGHT_UPI_SPIKE`: Flagged if >10 UPI credit transactions occur between 12 AM and 5 AM IST.
+  2. `HIGH_REVENUE_CONCENTRATION`: Flagged if >50% (WARNING) or >80% (CRITICAL) of total revenue originates from a single customer/counterparty.
+  - Returns `anomaly_flags: Vec<AnomalyFlag>` out of the Rust raw-zone.
+- **Backend (Python & DB)**: Added `anomaly_flags` JSONB column to `score_snapshots` model and created `DashboardInsight` ORM model with Alembic migrations `c07e52ec8bef`, `d30a8bcb1cb3`, and `78cb98f43ce0`.
+- **Frontend (Next.js)**: Added a "Risk Alerts (AML & Fraud)" panel in `score-board/page.tsx` displaying active flags with severity badges.
+
+---
+
+## 🔮 Upcoming V2 Roadmap
+1. **V2 Phase 3: OCEN Broadcast Mock (The Ecosystem Play)** *(NEXT)*
+   - Mock OCEN Gateway endpoint (`POST /api/ocen/broadcast`) simulating credit passport transmission to India Stack lenders (SBI, HDFC, ICICI).
+   - Next.js "Broadcast to OCEN" modal & live competing loan offer marketplace table.
+2. **V2 Phase 4: Tally ERP Integration (Deep Ingestion)**
+   - Go ingestion connector for parsing Tally Daybook XML exports into `RawTransaction` records.
+3. **V2 Phase 5: Database-per-Service & Auth Refactor**
+   - Isolate Postgres databases per microservice (Ingestion DB, Scoring DB, API DB) and enforce JWT RBAC.
 
 ## 🔑 Crucial Rules for Agents & Developers
 1. **Never Bypass the PII Chokepoint:** Any new data connector must return plaintext structs to the `orchestrator.go`. **Do not** manually call `age.Encrypt()` inside a connector.

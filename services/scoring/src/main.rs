@@ -1,3 +1,5 @@
+#![allow(dead_code, unused_imports)]
+
 // Nexus Credit Passport — Scoring Service
 //
 // Trust zone: RAW ZONE (TEE-bound in production).
@@ -52,6 +54,13 @@ struct ScoreRequest {
     business_id: String,
 }
 
+#[derive(Debug, Serialize, Clone)]
+pub struct AnomalyFlag {
+    pub rule_name: String,
+    pub description: String,
+    pub severity: String, // "CRITICAL" | "WARNING"
+}
+
 #[derive(Debug, Serialize)]
 struct ScoreResponse {
     business_id: String,
@@ -62,6 +71,7 @@ struct ScoreResponse {
     note: String,
     model_version: String,
     drivers: Vec<explain::ScoreDriver>,
+    anomaly_flags: Vec<AnomalyFlag>,
 }
 
 // ── Handler ───────────────────────────────────────────────────────────────────
@@ -84,7 +94,7 @@ async fn handle_score(
 
     // Extract all 12 features from Postgres (raw zone — only non-PII aggregates)
     let extractor = FeatureExtractor::new(state.db.clone());
-    let features = match extractor.extract(business_id).await {
+    let (features, anomaly_flags) = match extractor.extract(business_id).await {
         Ok(f) => f,
         Err(e) => {
             tracing::error!(
@@ -117,6 +127,7 @@ async fn handle_score(
         note,
         model_version: result.model_version,
         drivers: result.drivers,
+        anomaly_flags,
     };
 
     (StatusCode::OK, Json(json!(response))).into_response()

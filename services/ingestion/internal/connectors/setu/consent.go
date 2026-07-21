@@ -35,16 +35,16 @@ func (c *Client) CreateConsent(from, to time.Time) (*ConsentResponse, error) {
 				},
 			},
 			Purpose: Purpose{
-				Code:   "101",
-				RefURI: "https://api.rebit.org.in/aa/purpose/101.xml",
-				Text:   "Credit underwriting for MSME",
+				Code:     "101",
+				RefURI:   "https://api.rebit.org.in/aa/purpose/101.xml",
+				Text:     "Credit underwriting for MSME",
 				Category: PurposeCategory{Type: "string"},
 			},
 			FIDataRange: DateRange{
 				From: from.UTC().Format(time.RFC3339),
 				To:   to.UTC().Format(time.RFC3339),
 			},
-			DataLife: TimeUnit{Unit: "MONTH", Value: 6},
+			DataLife:  TimeUnit{Unit: "MONTH", Value: 6},
 			Frequency: TimeUnit{Unit: "HOUR", Value: 4},
 		},
 	}

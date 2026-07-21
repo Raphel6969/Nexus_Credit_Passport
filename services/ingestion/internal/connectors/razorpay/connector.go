@@ -42,7 +42,7 @@ func (c *Connector) Sync(ctx context.Context, req connectors.SyncRequest) (*conn
 	if err != nil {
 		return nil, fmt.Errorf("fetch payments: %w", err)
 	}
-	
+
 	var paymentsRes struct {
 		Items []struct {
 			ID        string `json:"id"`

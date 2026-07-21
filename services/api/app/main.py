@@ -1,6 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
-from fastapi.security import APIKeyHeader
-from app.core.config import settings
+from fastapi import FastAPI, Depends
 from app.core.deps import verify_api_key, check_rate_limit
 from app.routers import health, score, ingest, shares
 from app.routers import razorpay_demo

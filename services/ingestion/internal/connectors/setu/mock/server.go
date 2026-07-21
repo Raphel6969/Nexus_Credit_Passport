@@ -1,10 +1,11 @@
 // Mock Setu AA FIU server for local development.
 //
 // Serves responses shaped identically to the real Setu sandbox API:
-//   POST /consents      → 201 ConsentResponse
-//   GET  /consents/{id} → 200 ConsentStatusResponse (status: ACTIVE immediately)
-//   POST /sessions      → 201 SessionResponse
-//   GET  /sessions/{id} → 200 FIDataResponse with realistic Indian MSME data
+//
+//	POST /consents      → 201 ConsentResponse
+//	GET  /consents/{id} → 200 ConsentStatusResponse (status: ACTIVE immediately)
+//	POST /sessions      → 201 SessionResponse
+//	GET  /sessions/{id} → 200 FIDataResponse with realistic Indian MSME data
 //
 // Base URL: http://localhost:9090
 // Swap to real sandbox via SETU_BASE_URL env var — zero code change.

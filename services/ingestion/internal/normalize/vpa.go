@@ -1,9 +1,10 @@
 // VPA (Virtual Payment Address) extraction from UPI narration strings.
 //
 // UPI narrations from Indian banks follow patterns like:
-//   UPI/CR/240115143000/PhonePe/9876543210@ybl/Salary Jan
-//   UPI/DR/240115194500/Swiggy/merchant@paytm/Food Order
-//   UPI/CR/NEFT REF/beneficiary@okicici/Description
+//
+//	UPI/CR/240115143000/PhonePe/9876543210@ybl/Salary Jan
+//	UPI/DR/240115194500/Swiggy/merchant@paytm/Food Order
+//	UPI/CR/NEFT REF/beneficiary@okicici/Description
 //
 // A VPA matches the pattern: localPart@handle (e.g. merchant@paytm, user@okicici)
 // This regex is intentionally conservative — false negatives are OK; false positives

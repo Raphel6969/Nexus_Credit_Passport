@@ -1,8 +1,7 @@
 import uuid
-from datetime import datetime, timezone, date
-from typing import Optional
+from datetime import datetime, timezone
 
-from sqlalchemy import Column, String, BigInteger, DateTime, Date, ForeignKey, Text, Index, Integer
+from sqlalchemy import Column, String, BigInteger, DateTime, Date, ForeignKey, Text, Index, Integer, text
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -236,6 +235,8 @@ class ScoreSnapshot(Base):
     confidence = Column(String, nullable=False)                # LOW | MEDIUM | HIGH
     model_version = Column(String, nullable=False)             # e.g. linear-v1.0.0
     drivers = Column(JSONB, nullable=True)                     # [{feature, label, direction, impact, ...}]
+    anomaly_flags = Column(JSONB, nullable=True)               # [{rule_name, description, severity}]
+    ai_explanation = Column(Text, nullable=True)               # AI generated explanation
     computed_at = Column(DateTime(timezone=True), nullable=False)
     created_at = Column(DateTime(timezone=True), default=utc_now, nullable=False)
 
@@ -244,4 +245,17 @@ class ScoreSnapshot(Base):
     __table_args__ = (
         Index('ix_score_snapshots_biz_computed', 'business_id', 'computed_at'),
     )
+
+
+class DashboardInsight(Base):
+    __tablename__ = 'dashboard_insights'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    business_id = Column(UUID(as_uuid=True), ForeignKey('businesses.id'), nullable=False, index=True)
+    data_hash = Column(String(64), nullable=False, index=True)
+    insight_text = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=utc_now, server_default=text('now()'), nullable=False)
+
+    business = relationship("Business")
+
 

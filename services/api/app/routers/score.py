@@ -95,9 +95,9 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
         await db.execute(
             text("""
                 INSERT INTO score_snapshots
-                    (id, business_id, score, confidence, model_version, drivers, ai_explanation, computed_at, created_at)
+                    (id, business_id, score, confidence, model_version, drivers, anomaly_flags, ai_explanation, computed_at, created_at)
                 VALUES
-                    (CAST(:id AS UUID), CAST(:business_id AS UUID), :score, :confidence, :model_version, CAST(:drivers AS JSONB), :ai_explanation, :computed_at, :created_at)
+                    (CAST(:id AS UUID), CAST(:business_id AS UUID), :score, :confidence, :model_version, CAST(:drivers AS JSONB), CAST(:anomaly_flags AS JSONB), :ai_explanation, :computed_at, :created_at)
             """),
             {
                 "id": str(uuid.uuid4()),
@@ -106,6 +106,7 @@ async def get_score(business_id: str, db: AsyncSession = Depends(get_db)):
                 "confidence": scoring_result.get("confidence", "UNKNOWN"),
                 "model_version": scoring_result.get("model_version", "unknown"),
                 "drivers": json.dumps(scoring_result.get("drivers", [])),
+                "anomaly_flags": json.dumps(scoring_result.get("anomaly_flags", [])),
                 "ai_explanation": ai_explanation,
                 "computed_at": computed_at,
                 "created_at": computed_at,
@@ -373,16 +374,18 @@ async def get_dashboard(
         
         # Save to cache
         try:
+            now_utc = datetime.now(timezone.utc)
             await db.execute(
                 text("""
-                    INSERT INTO dashboard_insights (id, business_id, data_hash, insight_text)
-                    VALUES (CAST(:id AS UUID), CAST(:business_id AS UUID), :data_hash, :insight_text)
+                    INSERT INTO dashboard_insights (id, business_id, data_hash, insight_text, created_at)
+                    VALUES (CAST(:id AS UUID), CAST(:business_id AS UUID), :data_hash, :insight_text, :created_at)
                 """),
                 {
                     "id": str(uuid.uuid4()),
                     "business_id": business_id,
                     "data_hash": data_hash,
-                    "insight_text": ai_insight
+                    "insight_text": ai_insight,
+                    "created_at": now_utc,
                 }
             )
             await db.commit()
@@ -447,3 +450,91 @@ async def get_upi_transactions(
         for r in rows.fetchall()
     ]
     return {"items": items, "count": len(items)}
+
+
+@router.get("/businesses/{business_id}/stress-test")
+async def get_stress_test(
+    business_id: str,
+    amount: float,
+    rate: float,
+    tenure_months: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phase 1: "What-If" EMI Stress Test Simulator.
+    Calculates the EMI for the requested loan and compares it against
+    the business's historical monthly free cash flow (FCF).
+    """
+    if tenure_months <= 0 or amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid loan parameters.")
+
+    # 1. Calculate EMI
+    r = (rate / 100.0) / 12.0
+    if r == 0:
+        emi = amount / tenure_months
+    else:
+        emi = amount * r * ((1 + r) ** tenure_months) / (((1 + r) ** tenure_months) - 1)
+
+    # 2. Fetch last 12 months of transactions to compute Free Cash Flow
+    monthly_rows = await db.execute(
+        text("""
+            SELECT
+                DATE_TRUNC('month', t.timestamp) AS month,
+                t.type,
+                SUM(t.amount)                    AS total
+            FROM transactions t
+            JOIN accounts a ON t.account_id = a.id
+            WHERE a.business_id = CAST(:business_id AS UUID)
+              AND t.timestamp >= NOW() - INTERVAL '12 months'
+              AND t.revenue_role = 'primary'
+            GROUP BY month, t.type
+            ORDER BY month ASC
+        """),
+        {"business_id": business_id},
+    )
+    monthly_raw = monthly_rows.fetchall()
+
+    from collections import defaultdict
+    monthly_map: dict = defaultdict(lambda: {"earned": 0, "spent": 0})
+    for row in monthly_raw:
+        key = row.month.strftime("%Y-%m")
+        if row.type == "CREDIT":
+            monthly_map[key]["earned"] += (int(row.total) / 100.0) # convert paise to real
+        else:
+            monthly_map[key]["spent"] += (int(row.total) / 100.0)
+
+    fcf_history = []
+    for k, v in sorted(monthly_map.items()):
+        fcf = v["earned"] - v["spent"]
+        fcf_history.append({"month": k, "fcf": fcf, "earned": v["earned"], "spent": v["spent"]})
+
+    if not fcf_history:
+        raise HTTPException(
+            status_code=404,
+            detail="Not enough transaction history to run a stress test."
+        )
+
+    # 3. Call AI for risk assessment
+    from app.core.ai import generate_stress_test_analysis
+    
+    # Just pass the FCF numbers to the AI to save tokens
+    monthly_fcf_numbers = [m["fcf"] for m in fcf_history]
+    ai_analysis = await generate_stress_test_analysis(
+        monthly_fcf=monthly_fcf_numbers,
+        emi=emi,
+        amount=amount,
+        tenure_months=tenure_months
+    )
+
+    return {
+        "business_id": business_id,
+        "loan_details": {
+            "amount": amount,
+            "rate_pct": rate,
+            "tenure_months": tenure_months,
+            "emi": emi
+        },
+        "fcf_history": fcf_history,
+        "ai_analysis": ai_analysis
+    }
+
