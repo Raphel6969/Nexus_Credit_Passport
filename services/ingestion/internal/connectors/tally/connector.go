@@ -162,9 +162,9 @@ func (c *Connector) fetchDaybook(ctx context.Context) ([]byte, error) {
 func classifyVoucher(vchType string) (txnType, revenueRole string, ok bool) {
 	switch vchType {
 	case "Receipt", "Sales":
-		return "CREDIT", "informational", true
+		return "CREDIT", "primary", true
 	case "Payment", "Purchase":
-		return "DEBIT", "informational", true
+		return "DEBIT", "primary", true
 	default:
 		return "", "", false
 	}
