@@ -31,7 +31,7 @@ Product & tech debt backlog. One item per line. Move to sprint when committed.
 ## Phase 3 — Expand Data Sources
 - [ ] GSTN sandbox / synthetic connector
 - [ ] Razorpay webhook connector
-- [ ] Tally/Zoho accounting connector (pick one)
+- [x] Tally/Zoho accounting connector (pick one)
 - [ ] Connector interface standardization (revisit Phase 2 pattern)
 
 ## Phase 4 — Real Scoring & Explainability ✅

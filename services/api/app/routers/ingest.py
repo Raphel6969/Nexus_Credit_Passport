@@ -68,6 +68,14 @@ async def ingest_zoho(business_id: str, req: GenericIngestRequest):
     })
 
 
+@router.post("/businesses/{business_id}/ingest/tally", status_code=202)
+async def ingest_tally(business_id: str, req: GenericIngestRequest):
+    return await proxy_to_ingestion("/v1/ingest/tally", {
+        "accountId": req.accountId,
+        "businessId": business_id,
+    })
+
+
 @router.post("/businesses/{business_id}/ingest/manual-upi", status_code=202)
 async def ingest_manual_upi(business_id: str, req: ManualUPIIngestRequest):
     # Keep one stable account per business for manual UPI ingestion.
