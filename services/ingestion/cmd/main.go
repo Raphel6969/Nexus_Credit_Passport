@@ -106,6 +106,9 @@ func main() {
 	// POST /v1/ingest/zoho — Zoho Books invoices/bills
 	r.POST("/v1/ingest/zoho", makeGenericIngestHandler(orch, "zoho"))
 
+	// POST /v1/ingest/tally — Tally ERP daybook vouchers
+	r.POST("/v1/ingest/tally", makeGenericIngestHandler(orch, "tally"))
+
 	srv := &http.Server{
 		Addr:    ":8080",
 		Handler: r,
@@ -180,6 +183,8 @@ func makeGenericIngestHandler(orch *orchestrator.Orchestrator, source string) gi
 			connector = newRazorpayConnector()
 		case "zoho":
 			connector = newZohoConnector()
+		case "tally":
+			connector = newTallyConnector()
 		default:
 			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown source: " + source})
 			return

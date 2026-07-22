@@ -57,6 +57,7 @@ services:
       GSTN_BASE_URL: http://gstn-mock:9091
       RAZORPAY_BASE_URL: http://razorpay-mock:9092
       ZOHO_BASE_URL: http://zoho-mock:9093
+      TALLY_BASE_URL: http://tally-mock:9094
     ports:
       - "8080:8080"
     depends_on:
@@ -133,6 +134,16 @@ services:
     container_name: nexus-zoho-mock
     ports:
       - "9093:9093"
+    networks:
+      - nexus-network
+
+  tally-mock:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile.tally-mock
+    container_name: nexus-tally-mock
+    ports:
+      - "9094:9094"
     networks:
       - nexus-network
 
