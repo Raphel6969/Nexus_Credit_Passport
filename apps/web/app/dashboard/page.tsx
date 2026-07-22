@@ -12,6 +12,7 @@ import {
   type RecentTransaction,
 } from '../../lib/api';
 import { LoanSimulator } from '../../components/LoanSimulator';
+import { OcenBroadcastModal } from '../../components/OcenBroadcastModal';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -322,6 +323,7 @@ function DashboardContent() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [ocenModalOpen, setOcenModalOpen] = useState(false);
 
   useEffect(() => {
     if (!businessId) {
@@ -431,6 +433,38 @@ function DashboardContent() {
               </div>
             </div>
           </div>
+        </section>
+
+        {/* ── OCEN Network Broadcast CTA Banner ───────────────────────────── */}
+        <section>
+          <NeuCard className="relative overflow-hidden rounded-3xl border border-brand-teal/30 bg-gradient-to-r from-neu-surface via-neu-surface-low to-brand-teal/10 p-6 shadow-neu-raised">
+            <div className="flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-brand-teal/20 text-brand-teal shadow-neu-inset">
+                  <span className="material-symbols-outlined text-3xl">hub</span>
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="rounded-full bg-brand-teal/20 px-2.5 py-0.5 text-[10px] font-bold text-brand-teal uppercase tracking-wider">
+                      India Stack Protocol
+                    </span>
+                    <span className="text-[10px] text-neu-on-surface-variant font-medium">OCEN 4.0 Enabled</span>
+                  </div>
+                  <h3 className="text-lg font-bold text-neu-on-surface mt-1">Broadcast Passport to OCEN Network</h3>
+                  <p className="text-xs text-neu-on-surface-variant max-w-xl mt-0.5">
+                    Transmit an encrypted snapshot of your Credit Passport to SBI, HDFC, ICICI &amp; Bajaj Finserv to trigger an instant multi-lender loan auction.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setOcenModalOpen(true)}
+                className="shrink-0 flex items-center gap-2 rounded-2xl bg-brand-teal px-6 py-3 text-sm font-bold text-white shadow-neu-raised hover:brightness-110 active:shadow-neu-inset transition-all"
+              >
+                <span className="material-symbols-outlined text-base">cell_tower</span>
+                Broadcast to Network
+              </button>
+            </div>
+          </NeuCard>
         </section>
 
         {/* ── Hero: 3 stat cards ─────────────────────────────────────────── */}
@@ -645,6 +679,13 @@ function DashboardContent() {
         <section className="pb-12">
           <LoanSimulator businessId={businessId} />
         </section>
+
+        {/* ── Phase 3: OCEN Broadcast Modal ────────────────────────────────── */}
+        <OcenBroadcastModal
+          businessId={businessId}
+          isOpen={ocenModalOpen}
+          onClose={() => setOcenModalOpen(false)}
+        />
       </div>
     </AppShell>
   );

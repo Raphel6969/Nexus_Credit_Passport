@@ -234,3 +234,42 @@ export async function fetchStressTest(
     `/api/businesses/${encodeURIComponent(businessId)}/stress-test?${params.toString()}`
   );
 }
+
+// ── OCEN Network Broadcast ───────────────────────────────────────────────────
+
+export interface OcenOffer {
+  lender_id: string;
+  lender_name: string;
+  lender_type: string;
+  badge: string;
+  status: 'APPROVED' | 'REJECTED';
+  max_amount: number;
+  interest_rate_pct: number;
+  tenure_months: number;
+  processing_fee_pct: number;
+  disbursal_time: string;
+  rejection_reason?: string;
+}
+
+export interface OcenBroadcastResponse {
+  broadcast_id: string;
+  business_id: string;
+  score: number;
+  confidence: string;
+  timestamp: string;
+  offers: OcenOffer[];
+}
+
+export async function broadcastToOcen(
+  businessId: string,
+  requestedAmount: number = 1500000
+): Promise<OcenBroadcastResponse> {
+  return apiFetch('/api/ocen/broadcast', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      business_id: businessId,
+      requested_amount: requestedAmount,
+    }),
+  });
+}
