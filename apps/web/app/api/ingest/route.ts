@@ -18,7 +18,7 @@ export async function POST(request: NextRequest) {
       payload.consentId = consentId;
     }
 
-    const coreSources = ['aa', 'gstn', 'razorpay', 'zoho'];
+    const coreSources = ['aa', 'gstn', 'razorpay', 'zoho', 'tally'];
     if (!coreSources.includes(source)) {
       // Mock successful ingestion run for non-core demo adapters
       await new Promise((resolve) => setTimeout(resolve, 1000));
